@@ -245,6 +245,52 @@ class MyCustomStrategy(BaseStrategy):
 
 The new strategy is automatically available to the CLI and `run_backtest` function.
 
+## Live Paper Trading (Experimental)
+
+> **Status: paper trading only, no real money.** This is an active experiment being
+> validated over a period of months before any live capital is considered. See
+> [open issues](https://github.com/bryans0nic/ai-trader/issues) for the hardening
+> work still planned before that's on the table.
+
+Two ways to run strategies against a live (paper) brokerage account instead of historical data:
+
+**1. Run any built-in strategy against Alpaca paper trading**
+
+[`scripts/paper_trade_alpaca.py`](scripts/paper_trade_alpaca.py) polls Alpaca for
+recent bars, replays them through an unmodified `ai-trader` strategy to get a
+long/flat signal, and reconciles that against your Alpaca paper position.
+
+```bash
+uv run python scripts/paper_trade_alpaca.py --strategy NaiveSMAStrategy --symbol AAPL
+```
+
+Requires paper API keys from [alpaca.markets](https://alpaca.markets) in a local `.env`
+(see [`.env.example`](.env.example)).
+
+**2. Autonomous Motley Fool Stock Advisor -> local AI -> Alpaca pipeline**
+
+[`scripts/motley_fool/`](scripts/motley_fool/) scrapes new Motley Fool Stock Advisor
+picks (deterministically, via a saved login session -- no credentials stored), sends
+each new signal to a locally-hosted LLM (Qwen, served via LM Studio) for a buy/ignore/exit
+judgment with reasoning, and executes the resulting trade against Alpaca. Runs on a
+schedule (see [`run_scheduled.ps1`](scripts/motley_fool/run_scheduled.ps1)); every
+decision, including the model's full reasoning, is logged for later review.
+
+```bash
+# One-time: log into Motley Fool and save the session
+uv run python scripts/motley_fool/login_and_save_session.py
+
+# Check current portfolio / pending decisions
+uv run python scripts/motley_fool/portfolio.py
+
+# Review AI decision history with reasoning
+uv run python scripts/motley_fool/view_history.py
+```
+
+Portfolio rule: max 10 positions, ranked by AI-assigned confidence; a new pick can
+only enter by beating the lowest-confidence current holding. Position size scales
+with confidence. No stop-loss or drawdown circuit breaker yet -- see open issues.
+
 ## Documentation & Resources
 
 - **[Strategy Examples](ai_trader/backtesting/strategies/README.md)**: Details on built-in strategies.

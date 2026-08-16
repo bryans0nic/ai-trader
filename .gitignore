@@ -5,6 +5,15 @@ __pycache__/
 .pyc
 _data/
 
+# Contains live auth cookies -- never commit
+data/motley_fool/session.json
+data/motley_fool/state.json
+data/motley_fool/decisions.jsonl
+data/motley_fool/logs/
+
+# OS junk
+.DS_Store
+
 *.db
 
 poetry.lock
