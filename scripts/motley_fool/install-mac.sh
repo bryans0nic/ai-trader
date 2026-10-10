@@ -2,6 +2,8 @@
 # Runs the trader dashboard permanently on this Mac (starts at login, restarts if it dies), deploys merged PRs
 # from origin/main every 2 minutes, and publishes the page to your Tailscale devices over HTTPS.
 # Run from the main checkout as your normal user: ./scripts/motley_fool/install-mac.sh   (re-running is safe)
+#   --pipeline      also run the trading pipeline (ai_reconcile.py) every 30 minutes
+#   --no-pipeline   stop and remove the trading pipeline schedule
 set -euo pipefail
 
 DIR="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -50,6 +52,24 @@ write_plist com.aitrader.autodeploy "  <key>ProgramArguments</key><array>
   <key>StartInterval</key><integer>120</integer>
   <key>StandardOutPath</key><string>$LOGS/ai-trader-deploy.log</string>
   <key>StandardErrorPath</key><string>$LOGS/ai-trader-deploy.log</string>"
+
+PIPELINE=com.aitrader.pipeline
+if [ "${1:-}" = "--pipeline" ]; then
+  say "Starting the trading pipeline (every 30 minutes)"
+  .venv/bin/playwright install chromium >/dev/null
+  [ -f data/motley_fool/session.json ] || echo "No Motley Fool login saved yet. Run: uv run python scripts/motley_fool/login_and_save_session.py"
+  write_plist "$PIPELINE" "  <key>ProgramArguments</key><array>
+    <string>$DIR/.venv/bin/python</string><string>-u</string>
+    <string>$DIR/scripts/motley_fool/ai_reconcile.py</string>
+  </array>
+  <key>StartInterval</key><integer>1800</integer>
+  <key>StandardOutPath</key><string>$LOGS/ai-trader-pipeline.log</string>
+  <key>StandardErrorPath</key><string>$LOGS/ai-trader-pipeline.log</string>"
+elif [ "${1:-}" = "--no-pipeline" ]; then
+  say "Removing the trading pipeline schedule"
+  launchctl bootout "gui/$(id -u)/$PIPELINE" 2>/dev/null || true
+  rm -f "$AGENTS/$PIPELINE.plist"
+fi
 
 say "Publishing to your Tailscale devices"
 tailscale serve --bg --https="$TS_PORT" "http://127.0.0.1:$PORT"
