@@ -1,7 +1,7 @@
 """Web dashboard: decision history + reasoning, live account, performance, alerts, risk settings.
 
-Serves on localhost and on this machine's Tailscale IP only (never 0.0.0.0, so not
-reachable from the public internet).
+Serves on localhost only. Other devices reach it through Tailscale Serve (tailnet-only
+HTTPS proxy to this port; see install-mac.sh), same as ClaudeOS and SocialOS.
 
     uv run python scripts/motley_fool/dashboard.py [--port 8765]
 """
@@ -12,7 +12,7 @@ import os
 import re
 import shutil
 import subprocess
-import threading
+import time
 from html import escape
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -41,20 +41,17 @@ def all_decisions() -> list[dict]:
     return records[::-1]
 
 
-def tailscale_self() -> tuple[str | None, set[str]]:
-    """(this machine's Tailscale IPv4, its MagicDNS names), or (None, set()) if Tailscale is down."""
+def tailscale_names() -> set[str]:
+    """This machine's MagicDNS names (full and short), or an empty set if Tailscale is down."""
     exe = shutil.which("tailscale") or TAILSCALE_APP_BIN
     try:
         out = subprocess.run(
             [exe, "status", "--json"], capture_output=True, text=True, timeout=5
         ).stdout
-        me = json.loads(out)["Self"]
+        dns = json.loads(out)["Self"].get("DNSName", "").rstrip(".").lower()
     except (OSError, subprocess.TimeoutExpired, ValueError, KeyError):
-        return None, set()
-    ips = [ip for ip in me.get("TailscaleIPs", []) if "." in ip]
-    dns = me.get("DNSName", "").rstrip(".").lower()
-    names = {dns, dns.split(".")[0]} - {""}  # full MagicDNS name and its short form
-    return (ips[0] if ips else None), names
+        return set()
+    return {dns, dns.split(".")[0]} - {""}
 
 
 def _pct(v: float | None) -> str:
@@ -287,7 +284,7 @@ def decision_page(decision_id: int) -> bytes | None:
     return page(body, f"{d['symbol']} decision")
 
 
-def make_handler(client_factory, allowed_hosts: set[str]):
+def make_handler(client_factory, allowed_hosts: set[str], refresh_hosts=None):
     class Handler(BaseHTTPRequestHandler):
         def _send(self, status: int, body: bytes = b"", location: str | None = None):
             self.send_response(status)
@@ -303,6 +300,8 @@ def make_handler(client_factory, allowed_hosts: set[str]):
             # Blocks DNS-rebinding / cross-site form posts against the localhost server.
             host = (self.headers.get("Host") or "").rsplit(":", 1)[0]
             origin = urlparse(self.headers.get("Origin") or "").hostname
+            if refresh_hosts and host not in allowed_hosts:
+                refresh_hosts()
             return host in allowed_hosts and (origin is None or origin in allowed_hosts)
 
         def do_GET(self):
@@ -350,17 +349,22 @@ def make_handler(client_factory, allowed_hosts: set[str]):
 def serve(port: int = PORT, client_factory=None) -> None:
     if client_factory is None:
         from portfolio import _client as client_factory
-    ts_ip, ts_names = tailscale_self()
-    hosts = ["127.0.0.1"] + ([ts_ip] if ts_ip else [])
-    handler = make_handler(client_factory, {"127.0.0.1", "localhost", *hosts, *ts_names})
-    servers = [ThreadingHTTPServer((h, port), handler) for h in hosts]
-    for s in servers:
-        print(f"Dashboard: http://{s.server_address[0]}:{port}/")
-    if not ts_ip:
-        print("Tailscale IP not found; serving on localhost only.")
-    for s in servers[1:]:
-        threading.Thread(target=s.serve_forever, daemon=True).start()
-    servers[0].serve_forever()
+    allowed = {"127.0.0.1", "localhost"}
+    last_refresh = 0.0
+
+    def refresh() -> None:
+        # Tailscale may come up after this service does (login), so re-ask on an unknown host.
+        nonlocal last_refresh
+        if time.time() - last_refresh > 30:
+            last_refresh = time.time()
+            allowed.update(tailscale_names())
+
+    refresh()
+    server = ThreadingHTTPServer(
+        ("127.0.0.1", port), make_handler(client_factory, allowed, refresh)
+    )
+    print(f"Dashboard: http://127.0.0.1:{port}/  (allowed hosts: {sorted(allowed)})")
+    server.serve_forever()
 
 
 if __name__ == "__main__":
