@@ -1,9 +1,8 @@
 """Persisted state for the Motley Fool -> Alpaca paper trading pipeline."""
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
 
 STATE_PATH = Path(__file__).resolve().parents[2] / "data" / "motley_fool" / "state.json"
 
@@ -45,7 +44,7 @@ def ingest_scraped_rows(rows: list[dict], seed_baseline: bool = False) -> list[d
 
         entry = {
             **row,
-            "detected_at": datetime.now(timezone.utc).isoformat(),
+            "detected_at": datetime.now(UTC).isoformat(),
             "confidence": None,
             "status": "baseline" if seed_baseline else "pending_decision",
         }
@@ -53,7 +52,7 @@ def ingest_scraped_rows(rows: list[dict], seed_baseline: bool = False) -> list[d
         if not seed_baseline:
             newly_queued.append(entry)
 
-    state["last_scraped"] = datetime.now(timezone.utc).isoformat()
+    state["last_scraped"] = datetime.now(UTC).isoformat()
     save_state(state)
     return newly_queued
 
@@ -69,7 +68,7 @@ def set_confidence(symbol: str, confidence: float) -> dict:
     return entry
 
 
-def get_confidence(symbol: str) -> Optional[float]:
+def get_confidence(symbol: str) -> float | None:
     state = load_state()
     entry = state["picks"].get(symbol)
     return entry["confidence"] if entry else None

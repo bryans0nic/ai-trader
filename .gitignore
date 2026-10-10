@@ -10,6 +10,10 @@ data/motley_fool/session.json
 data/motley_fool/state.json
 data/motley_fool/decisions.jsonl
 data/motley_fool/logs/
+data/motley_fool/alerts.jsonl
+data/motley_fool/settings.json
+data/motley_fool/last_scrape_hit.json
+.deploy.lock
 
 # OS junk
 .DS_Store

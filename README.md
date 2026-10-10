@@ -267,11 +267,11 @@ uv run python scripts/paper_trade_alpaca.py --strategy NaiveSMAStrategy --symbol
 Requires paper API keys from [alpaca.markets](https://alpaca.markets) in a local `.env`
 (see [`.env.example`](.env.example)).
 
-**2. Autonomous Motley Fool Stock Advisor -> local AI -> Alpaca pipeline**
+**2. Autonomous Motley Fool Stock Advisor -> Claude -> Alpaca pipeline**
 
 [`scripts/motley_fool/`](scripts/motley_fool/) scrapes new Motley Fool Stock Advisor
 picks (deterministically, via a saved login session -- no credentials stored), sends
-each new signal to a locally-hosted LLM (Qwen, served via LM Studio) for a buy/ignore/exit
+each new signal to Claude (via the logged-in Claude Code CLI) for a buy/ignore/exit
 judgment with reasoning, and executes the resulting trade against Alpaca. Runs on a
 schedule (see [`run_scheduled.ps1`](scripts/motley_fool/run_scheduled.ps1)); every
 decision, including the model's full reasoning, is logged for later review.
@@ -310,3 +310,17 @@ If you find this project helpful, please give it a star !
 
 This project is licensed under the GNU General Public License v3 (GPL-3.0). See the [LICENSE](LICENSE) file for details.
  
+
+#### Dashboard, alerts and risk limits (Motley Fool pipeline)
+
+```bash
+uv run python scripts/motley_fool/dashboard.py   # http://127.0.0.1:8765 (this Mac only)
+./scripts/motley_fool/install-mac.sh             # run it permanently + reachable from your Tailscale devices
+```
+
+Mobile-friendly page with decision history and full reasoning, live Alpaca positions / buying power / P&L,
+ignored-pick performance, returns vs the S&P 500, a notification center (stop-loss, kill switch, expired
+session), editable stop-loss / daily-loss limits (defaults 10% / 5%) and a form to save Alpaca paper keys
+into `.env`. It listens on localhost only; `install-mac.sh` adds a login service, auto-deploy from `main`
+every 2 minutes, and a tailnet-only HTTPS address via Tailscale Serve (port 10443). There is no login on the
+page, so anyone on your tailnet can use it. Paper-to-live gate: [`docs/paper-to-live-checklist.md`](docs/paper-to-live-checklist.md).
