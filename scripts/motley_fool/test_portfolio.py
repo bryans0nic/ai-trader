@@ -87,7 +87,8 @@ def test_stop_loss_sells_and_notifies():
 
 
 def test_limits_default_then_adjustable():
-    assert alerts.get_settings() == {"stop_loss_pct": 10.0, "daily_loss_pct": 5.0}
+    s = alerts.get_settings()
+    assert (s["stop_loss_pct"], s["daily_loss_pct"], s["trading_paused"]) == (10.0, 5.0, False)
     c = FakeClient(positions=[position("A", plpc=-0.07)])
     assert portfolio.check_stop_losses(c) == []  # -7% inside default 10%
     alerts.save_settings(stop_loss_pct=5)
@@ -110,3 +111,28 @@ def test_kill_switch_not_tripped_inside_limit(run):
     alerts.save_settings(daily_loss_pct=2)
     c = run("NEW", 90, FakeClient(equity=97_000, last_equity=100_000))
     assert c.orders == []
+
+
+def test_stop_loss_skips_exempt_and_pending_orders():
+    from types import SimpleNamespace
+
+    c = FakeClient(
+        positions=[
+            position("EX", plpc=-0.2),
+            position("PEND", plpc=-0.2),
+            position("BAD", plpc=-0.2),
+        ]
+    )
+    c.open_orders = [SimpleNamespace(symbol="PEND")]
+    alerts.set_stop_loss_exempt("EX", True)
+    assert portfolio.check_stop_losses(c) == ["BAD"]
+    alerts.set_stop_loss_exempt("EX", False)
+    assert portfolio.check_stop_losses(c) == ["EX"]
+
+
+def test_manual_sell_only_for_held_symbols():
+    c = FakeClient(positions=[position("AAA")])
+    portfolio.manual_sell(c, "AAA")
+    assert c.closed == ["AAA"] and alerts.load_alerts()[0]["kind"] == "manual_sell"
+    with pytest.raises(ValueError):
+        portfolio.manual_sell(c, "ZZZ")

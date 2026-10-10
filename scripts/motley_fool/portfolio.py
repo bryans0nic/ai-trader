@@ -66,21 +66,40 @@ def daily_loss_tripped(account) -> bool:
 
 
 def check_stop_losses(trading_client: TradingClient) -> list[str]:
-    """Sell any holding whose unrealized loss is past the stop-loss limit. Returns symbols sold."""
-    limit = get_settings()["stop_loss_pct"]
+    """Place a sell for any holding whose unrealized loss is past the stop-loss limit, skipping
+    exempt symbols and ones that already have an order waiting. Returns the symbols sold."""
+    settings = get_settings()
+    limit = settings["stop_loss_pct"]
+    skip = set(settings["stop_loss_exempt"]) | {o.symbol for o in trading_client.get_orders()}
     sold = []
     for p in trading_client.get_all_positions():
         loss_pct = float(p.unrealized_plpc) * 100
-        if loss_pct > -limit:
+        if loss_pct > -limit or p.symbol in skip:
             continue
         trading_client.close_position(p.symbol)
         sold.append(p.symbol)
-        notify("stop_loss", f"Stop-loss: sold {p.symbol} at {loss_pct:.2f}% (limit -{limit:g}%).")
-        state = load_state()
-        if p.symbol in state["picks"]:
-            state["picks"][p.symbol]["status"] = "stopped_out"
-            save_state(state)
+        notify(
+            "stop_loss",
+            f"Stop-loss: sell order placed for {p.symbol} at {loss_pct:.2f}% (limit -{limit:g}%).",
+        )
+        _set_pick_status(p.symbol, "stopped_out")
     return sold
+
+
+def manual_sell(trading_client: TradingClient, symbol: str) -> None:
+    """Close a holding on request from the dashboard."""
+    if not any(p.symbol == symbol for p in trading_client.get_all_positions()):
+        raise ValueError(f"{symbol} is not currently held.")
+    trading_client.close_position(symbol)
+    notify("manual_sell", f"Manual sell order placed for {symbol} from the dashboard.")
+    _set_pick_status(symbol, "sold_manually")
+
+
+def _set_pick_status(symbol: str, status: str) -> None:
+    state = load_state()
+    if symbol in state["picks"]:
+        state["picks"][symbol]["status"] = status
+        save_state(state)
 
 
 def current_holdings(trading_client: TradingClient) -> list[dict]:
@@ -88,7 +107,9 @@ def current_holdings(trading_client: TradingClient) -> list[dict]:
     holdings = []
     for p in positions:
         confidence = get_confidence(p.symbol) or 0.0
-        holdings.append({"symbol": p.symbol, "confidence": confidence, "market_value": float(p.market_value)})
+        holdings.append(
+            {"symbol": p.symbol, "confidence": confidence, "market_value": float(p.market_value)}
+        )
     return holdings
 
 
@@ -169,7 +190,9 @@ def _buy(trading_client: TradingClient, symbol: str, notional: float, account) -
     buying_power = float(account.buying_power)
     notional = min(notional, buying_power)
     if notional < 1.0:
-        logger.warning(f"Insufficient buying power (${buying_power:,.2f}) to buy {symbol}. Skipping.")
+        logger.warning(
+            f"Insufficient buying power (${buying_power:,.2f}) to buy {symbol}. Skipping."
+        )
         return
 
     order = MarketOrderRequest(
@@ -193,10 +216,14 @@ def print_status() -> None:
     holdings = current_holdings(trading_client)
     state = load_state()
 
-    print(f"Portfolio value: ${float(account.portfolio_value):,.2f}  Cash: ${float(account.cash):,.2f}")
+    print(
+        f"Portfolio value: ${float(account.portfolio_value):,.2f}  Cash: ${float(account.cash):,.2f}"
+    )
     print(f"Holdings ({len(holdings)}/{MAX_HOLDINGS}):")
     for h in sorted(holdings, key=lambda x: -x["confidence"]):
-        print(f"  {h['symbol']:<6} confidence={h['confidence']:>5.1f}  value=${h['market_value']:,.2f}")
+        print(
+            f"  {h['symbol']:<6} confidence={h['confidence']:>5.1f}  value=${h['market_value']:,.2f}"
+        )
 
     pending = [p for p in state["picks"].values() if p["status"] == "pending_decision"]
     if pending:

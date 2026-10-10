@@ -2,6 +2,7 @@ import json
 import threading
 import urllib.error
 import urllib.request
+from datetime import UTC, datetime
 from http.server import ThreadingHTTPServer
 from types import SimpleNamespace
 
@@ -49,7 +50,10 @@ def server(tmp_path, monkeypatch):
     monkeypatch.setattr(metrics, "price_on", lambda s, day: prices[s][0])
     monkeypatch.setattr(metrics, "latest_price", lambda s: prices[s][1])
     ns = SimpleNamespace
+    closed = []
+    day = 86400
     client = ns(
+        closed=closed,
         get_account=lambda: ns(
             equity="10500", last_equity="10000", cash="4000", buying_power="8000"
         ),
@@ -60,9 +64,33 @@ def server(tmp_path, monkeypatch):
                 market_value="1100",
                 unrealized_pl="100",
                 unrealized_plpc="0.1",
+                avg_entry_price="100",
             )
         ],
+        get_orders=lambda filter=None: [
+            ns(
+                symbol="AAA",
+                side=ns(value="sell"),
+                status=ns(value="accepted"),
+                qty="10",
+                notional=None,
+                filled_avg_price=None,
+                submitted_at=datetime(2026, 9, 5, 14, 0, tzinfo=UTC),
+            )
+        ],
+        get_portfolio_history=lambda req: ns(
+            timestamp=[1756684800 + i * day for i in range(4)],
+            equity=[None, 10000.0, 10200.0, 10500.0],
+        ),
+        close_position=closed.append,
     )
+    monkeypatch.setattr(
+        metrics,
+        "sp500_closes",
+        lambda start: {"2025-09-02": 5000.0, "2025-09-03": 5050.0, "2025-09-04": 5100.0},
+    )
+    monkeypatch.setattr(dashboard, "PIPELINE_PLIST", tmp_path / "pipeline.plist")
+    test_pause_run_now_exempt_and_sell.client = client
     srv = ThreadingHTTPServer(
         ("127.0.0.1", 0), dashboard.make_handler(lambda: client, {"127.0.0.1"})
     )
@@ -76,7 +104,7 @@ def get(url):
 
 
 def test_decisions_newest_first_and_reasoning_matches_log(server):
-    html = get(server + "/")
+    html = get(server + "/").split("<section id=decisions>")[1]
     assert html.index("/decision/1") < html.index("/decision/0")  # BBB (newer) before AAA
     detail = get(server + "/decision/0")
     assert (
@@ -139,3 +167,80 @@ def test_home_screen_icon(server):
     assert "rel=apple-touch-icon" in get(server + "/")
     r = urllib.request.urlopen(server + "/apple-touch-icon.png")
     assert r.headers["Content-Type"] == "image/png" and r.read()[:4] == b"\x89PNG"
+
+
+def post(url, data=b""):
+    return (
+        urllib.request.urlopen(urllib.request.Request(url, data=data, method="POST"))
+        .read()
+        .decode()
+    )
+
+
+def test_status_strip_orders_and_unread_banner(server):
+    html = get(server + "/")
+    assert "Never run on this Mac" in html and "Not scheduled" in html
+    assert (
+        "accepted" in html and "<time datetime='2026-09-05T14:00:00+00:00'>" in html
+    )  # pending order
+    assert "role=alert" not in html
+
+    alerts.write_run_status(
+        {
+            "started": "2026-09-05T14:00:00+00:00",
+            "finished": "2026-09-05T14:00:09+00:00",
+            "ok": True,
+            "summary": "no new picks",
+            "session_ok": False,
+        }
+    )
+    alerts.notify("stop_loss", "Stop-loss: sell order placed for AAA")
+    html = get(server + "/")
+    assert "no new picks" in html and "Needs login" in html
+    assert "role=alert" in html and "Alerts <b>(1)</b>" in html
+    html = post(server + "/alerts/read")
+    assert "role=alert" not in html and "Alerts <b>" not in html
+
+
+def test_chart_position_detail_and_outcomes(server):
+    html = get(server + "/?range=1w")
+    assert "<polyline class='line s-portfolio'" in html and "<polyline class='line s-sp500'" in html
+    assert ">+5.0%</text>" in html and ">+2.0%</text>" in html  # 10000 -> 10500, 5000 -> 5100
+    assert "Show as table" in html and "aria-current=true>1W" in html
+    assert (
+        "Avg entry" in html and "20.0 points above the −10% stop-loss" in html
+    )  # +10% vs -10% limit
+    assert "See the decision that bought it" in html
+    assert "Since buy" in html and "Would be" in html
+
+
+def test_decision_filters(server):
+    html = get(server + "/?action=ignore")
+    assert "1 of 2 decisions" in html and "second" in html and "first &lt;b&gt;" not in html
+    assert "No decisions match" in get(server + "/?q=ZZZ")
+    assert "1 of 2 decisions" in get(server + "/?q=aa")
+
+
+def test_pause_run_now_exempt_and_sell(server, monkeypatch):
+    assert "Trading paused" in post(server + "/pause", b"paused=1")
+    assert alerts.get_settings()["trading_paused"] is True
+    post(server + "/pause", b"paused=0")
+    assert alerts.get_settings()["trading_paused"] is False
+
+    started = []
+    monkeypatch.setattr(dashboard, "start_pipeline_run", lambda: started.append(1))
+    assert "Pipeline run started" in post(server + "/run")
+    assert started == [1]
+
+    assert "Exempt from the stop-loss" in post(server + "/positions/exempt", b"symbol=AAA&exempt=1")
+    assert alerts.get_settings()["stop_loss_exempt"] == ["AAA"]
+
+    confirm = get(server + "/sell?symbol=AAA")
+    assert (
+        "Yes, sell AAA" in confirm and test_pause_run_now_exempt_and_sell.client.closed == []
+    )  # GET never sells
+    post(server + "/positions/sell", b"symbol=AAA")
+    assert test_pause_run_now_exempt_and_sell.client.closed == ["AAA"]
+    for bad in (b"symbol=ZZZ", b"symbol=a;b"):
+        with pytest.raises(urllib.error.HTTPError):
+            post(server + "/positions/sell", bad)

@@ -18,13 +18,13 @@ Usage:
 
 import sys
 import time
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import state  # noqa: E402
 from ai_decide import decide  # noqa: E402
-from alerts import notify  # noqa: E402
+from alerts import get_settings, notify, read_run_status, write_run_status  # noqa: E402
 from backoff import RETRY_BASE_S, may_hit_site, record_hit, retry_wait  # noqa: E402
 from portfolio import (  # noqa: E402
     _client,
@@ -111,16 +111,28 @@ def scrape_politely(attempts: int = 4, sleep=time.sleep) -> list[dict] | None:
             sleep(wait)
 
 
-def main() -> None:
+def run_once() -> tuple[str, bool | None]:
+    """One pipeline pass. Returns (summary for the dashboard, Motley Fool login ok / None if not checked)."""
+    notes = []
     try:
-        check_stop_losses(_client())
+        sold = check_stop_losses(_client())
+        if sold:
+            notes.append(f"stop-loss sold {', '.join(sold)}")
     except Exception:
         logger.exception("Stop-loss check failed; continuing.")
+        notes.append("stop-loss check failed")
+
+    def done(text: str, session_ok: bool | None) -> tuple[str, bool | None]:
+        return "; ".join([*notes, text]), session_ok
+
+    if get_settings()["trading_paused"]:
+        logger.info("Trading is paused; not looking for new picks.")
+        return done("trading paused, new picks not checked", None)
 
     logger.info("Scraping Motley Fool Stock Advisor New Recs...")
     rows = scrape_politely()
     if rows is None:
-        return
+        return done("checked the site too recently, skipped", None)
     logger.info(f"Scraped {len(rows)} Stock Advisor rows.")
 
     # First run on a machine with no state: record what's already on the page as known, so the
@@ -133,17 +145,42 @@ def main() -> None:
             "pipeline",
             f"First run on this machine: {len(rows)} existing recs recorded as baseline, none traded.",
         )
-        return
+        return done(f"first run, {len(rows)} existing recs recorded", True)
     if not new_picks:
         logger.info("No new picks or sell signals since last run.")
-        return
+        return done("no new picks", True)
 
-    logger.info(f"{len(new_picks)} new signal(s) detected: {[p['symbol'] for p in new_picks]}")
+    symbols = [p["symbol"] for p in new_picks]
+    logger.info(f"{len(new_picks)} new signal(s) detected: {symbols}")
     for pick in new_picks:
         try:
             process_pick(pick)
         except Exception:
             logger.exception(f"Error processing {pick['symbol']}; continuing with remaining picks.")
+    return done(f"{len(new_picks)} new signal(s): {', '.join(symbols)}", True)
+
+
+def main() -> None:
+    previous = read_run_status() or {}
+    status = {
+        "started": datetime.now(UTC).isoformat(),
+        "ok": False,
+        "session_ok": previous.get("session_ok"),
+    }
+    try:
+        summary, session_ok = run_once()
+        status.update(ok=True, summary=summary)
+        if session_ok is not None:
+            status["session_ok"] = session_ok
+    except SessionExpiredError as e:
+        status.update(summary=f"Motley Fool login needed: {e}", session_ok=False)
+        raise
+    except Exception as e:
+        status["summary"] = f"failed: {e}"
+        raise
+    finally:
+        status["finished"] = datetime.now(UTC).isoformat()
+        write_run_status(status)
 
 
 if __name__ == "__main__":
