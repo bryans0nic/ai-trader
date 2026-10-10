@@ -82,3 +82,33 @@ def test_first_run_seeds_baseline_and_trades_nothing(monkeypatch):
     )
     ai_reconcile.main()
     assert seen == ["NEW"]
+
+
+def test_paused_skips_scrape_but_runs_stop_loss_and_records_status(monkeypatch):
+    import alerts
+
+    checked = []
+    monkeypatch.setattr(ai_reconcile, "check_stop_losses", lambda c: checked.append(1) or ["BAD"])
+    monkeypatch.setattr(ai_reconcile, "_client", lambda: None)
+    monkeypatch.setattr(
+        ai_reconcile, "scrape_stock_advisor_rows", lambda: pytest.fail("must not scrape")
+    )
+    alerts.save_settings(trading_paused=True)
+    ai_reconcile.main()
+    status = alerts.read_run_status()
+    assert checked and status["ok"] and "paused" in status["summary"] and "BAD" in status["summary"]
+
+
+def test_expired_session_is_recorded_in_run_status(monkeypatch):
+    import alerts
+
+    def expired():
+        raise SessionExpiredError("redirected to login")
+
+    monkeypatch.setattr(ai_reconcile, "check_stop_losses", lambda c: [])
+    monkeypatch.setattr(ai_reconcile, "_client", lambda: None)
+    monkeypatch.setattr(ai_reconcile, "scrape_stock_advisor_rows", expired)
+    with pytest.raises(SessionExpiredError):
+        ai_reconcile.main()
+    status = alerts.read_run_status()
+    assert status["ok"] is False and status["session_ok"] is False and status["finished"]

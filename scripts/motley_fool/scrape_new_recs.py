@@ -17,6 +17,7 @@ SESSION_PATH = Path(__file__).resolve().parents[2] / "data" / "motley_fool" / "s
 NEW_RECS_URL = "https://www.fool.com/premium/new-recs"
 STOCK_ADVISOR_SLUG = "/premium/my-services/stock-advisor"
 
+
 class SessionExpiredError(RuntimeError):
     """Saved Motley Fool login is missing/expired: needs a human to re-run login_and_save_session.py."""
 

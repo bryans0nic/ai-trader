@@ -17,7 +17,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 CLAUDE_BIN = os.environ.get("CLAUDE_BIN", "claude")
-MODEL = os.environ.get("TRADER_CLAUDE_MODEL", "sonnet")  # alias; the model actually used is logged per decision
+MODEL = os.environ.get(
+    "TRADER_CLAUDE_MODEL", "sonnet"
+)  # alias; the model actually used is logged per decision
 CLAUDE_TIMEOUT_S = 180
 
 ACTIONS = ("buy", "ignore", "exit")
@@ -58,25 +60,52 @@ trading system for testing. Be decisive."""
 
 
 def _build_user_prompt(pick: dict, portfolio_context: dict) -> str:
-    return json.dumps({"new_signal": pick, "current_portfolio": portfolio_context}, indent=2, default=str)
+    return json.dumps(
+        {"new_signal": pick, "current_portfolio": portfolio_context}, indent=2, default=str
+    )
 
 
 def _call_claude(system_prompt: str, user_prompt: str) -> dict:
     """One headless Claude call, no tools/MCP/settings. Returns {"content", "reasoning", "model"}."""
-    env = {k: v for k, v in os.environ.items() if k not in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")}
-    for key in ("CLAUDECODE", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_CODE_ENTRYPOINT"):
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if k not in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")
+    }
+    for key in (
+        "CLAUDECODE",
+        "CLAUDE_CODE_SESSION_ID",
+        "CLAUDE_CODE_CHILD_SESSION",
+        "CLAUDE_CODE_ENTRYPOINT",
+    ):
         env.pop(key, None)  # don't look like a child of an enclosing Claude Code session
     args = [
-        CLAUDE_BIN, "-p", "--output-format", "json", "--no-session-persistence",
-        "--setting-sources", "", "--strict-mcp-config", "--tools", "",
-        "--model", MODEL, "--system-prompt", system_prompt,
-        "--json-schema", json.dumps(DECISION_SCHEMA),
+        CLAUDE_BIN,
+        "-p",
+        "--output-format",
+        "json",
+        "--no-session-persistence",
+        "--setting-sources",
+        "",
+        "--strict-mcp-config",
+        "--tools",
+        "",
+        "--model",
+        MODEL,
+        "--system-prompt",
+        system_prompt,
+        "--json-schema",
+        json.dumps(DECISION_SCHEMA),
     ]
-    proc = subprocess.run(args, input=user_prompt, capture_output=True, text=True, timeout=CLAUDE_TIMEOUT_S, env=env)
+    proc = subprocess.run(
+        args, input=user_prompt, capture_output=True, text=True, timeout=CLAUDE_TIMEOUT_S, env=env
+    )
     try:
         res = json.loads(proc.stdout)
     except json.JSONDecodeError:
-        raise RuntimeError(f"claude exited {proc.returncode}: {proc.stderr.strip()[-400:]}") from None
+        raise RuntimeError(
+            f"claude exited {proc.returncode}: {proc.stderr.strip()[-400:]}"
+        ) from None
     if res.get("is_error"):
         raise RuntimeError(f"claude error: {res.get('result')}")
     structured = res.get("structured_output")

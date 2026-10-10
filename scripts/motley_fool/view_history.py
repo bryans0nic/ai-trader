@@ -19,7 +19,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("symbol", nargs="?", default=None)
     parser.add_argument("--limit", type=int, default=20)
-    parser.add_argument("--full", action="store_true", help="Show full model reasoning, not just the summary")
+    parser.add_argument(
+        "--full", action="store_true", help="Show full model reasoning, not just the summary"
+    )
     args = parser.parse_args()
 
     records = load_decision_history(symbol=args.symbol, limit=args.limit)
@@ -29,9 +31,13 @@ def main() -> None:
 
     for r in records:
         d = r["decision"]
-        print(f"{r['timestamp']}  {r['symbol']:<8} {d['action']:<6} confidence={d.get('confidence')}")
-        print(f"  signal: {r['signal'].get('action')} rec'd {r['signal'].get('rec_date')} "
-              f"({r['signal'].get('type', '?')}, mkt cap {r['signal'].get('market_cap', '?')})")
+        print(
+            f"{r['timestamp']}  {r['symbol']:<8} {d['action']:<6} confidence={d.get('confidence')}"
+        )
+        print(
+            f"  signal: {r['signal'].get('action')} rec'd {r['signal'].get('rec_date')} "
+            f"({r['signal'].get('type', '?')}, mkt cap {r['signal'].get('market_cap', '?')})"
+        )
         print(f"  reasoning: {d['reasoning']}")
         if args.full:
             print(f"  full model chain-of-thought:\n{r['model_reasoning']}")

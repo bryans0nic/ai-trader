@@ -17,6 +17,8 @@ def isolated_data(tmp_path, monkeypatch):
     monkeypatch.setattr(state, "STATE_PATH", tmp_path / "state.json")
     monkeypatch.setattr(alerts, "ALERTS_PATH", tmp_path / "alerts.jsonl")
     monkeypatch.setattr(alerts, "SETTINGS_PATH", tmp_path / "settings.json")
+    monkeypatch.setattr(alerts, "ALERTS_READ_PATH", tmp_path / "alerts_read.json")
+    monkeypatch.setattr(alerts, "RUN_STATUS_PATH", tmp_path / "run_status.json")
     monkeypatch.setattr(backoff, "LAST_HIT_PATH", tmp_path / "last_hit.json")
 
 
@@ -32,10 +34,13 @@ class FakeClient:
             buying_power=str(equity if buying_power is None else buying_power),
         )
         self.positions = list(positions)
-        self.orders, self.closed = [], []
+        self.orders, self.closed, self.open_orders = [], [], []
 
     def get_account(self):
         return self.account
+
+    def get_orders(self, filter=None):
+        return self.open_orders
 
     def get_all_positions(self):
         return self.positions

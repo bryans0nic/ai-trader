@@ -13,6 +13,8 @@ data/motley_fool/logs/
 data/motley_fool/alerts.jsonl
 data/motley_fool/settings.json
 data/motley_fool/last_scrape_hit.json
+data/motley_fool/alerts_read.json
+data/motley_fool/run_status.json
 .deploy.lock
 
 # OS junk
