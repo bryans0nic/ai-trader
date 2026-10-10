@@ -33,7 +33,12 @@ $2
 </dict></plist>
 PLIST
   launchctl bootout "gui/$(id -u)/$1" 2>/dev/null || true
-  launchctl bootstrap "gui/$(id -u)" "$AGENTS/$1.plist"
+  # bootout returns before the old job is fully gone; bootstrap fails with "Input/output error" until it is.
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    launchctl bootstrap "gui/$(id -u)" "$AGENTS/$1.plist" 2>/dev/null && return 0
+    sleep 1
+  done
+  echo "Could not start $1 (launchctl bootstrap kept failing)."; exit 1
 }
 
 say "Starting the dashboard service"
