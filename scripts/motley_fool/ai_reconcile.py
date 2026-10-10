@@ -6,7 +6,8 @@ trade against the Alpaca paper account. Every AI decision is appended to
 data/motley_fool/decisions.jsonl with its full reasoning, whether or not it
 led to a trade.
 
-This is the script meant to run unattended (e.g. via Windows Task Scheduler).
+This is the script meant to run unattended (launchd on the Mac via install-mac.sh
+--pipeline, or Windows Task Scheduler).
 It never asks for input; on any hard failure (expired session, scrape
 returning nothing, API errors) it raises rather than silently doing nothing,
 so a broken run is loud, not invisible.
@@ -21,6 +22,7 @@ from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import state  # noqa: E402
 from ai_decide import decide  # noqa: E402
 from alerts import notify  # noqa: E402
 from backoff import RETRY_BASE_S, may_hit_site, record_hit, retry_wait  # noqa: E402
@@ -71,7 +73,9 @@ def process_pick(pick: dict) -> None:
         return
 
     decision = decide(pick, portfolio_context)
-    logger.info(f"{symbol}: AI decision={decision['action']} confidence={decision.get('confidence')} -- {decision['reasoning']}")
+    logger.info(
+        f"{symbol}: AI decision={decision['action']} confidence={decision.get('confidence')} -- {decision['reasoning']}"
+    )
 
     if decision["action"] == "exit":
         exit_position(symbol)  # sets status to "exited"
@@ -93,7 +97,11 @@ def scrape_politely(attempts: int = 4, sleep=time.sleep) -> list[dict] | None:
         try:
             return scrape_stock_advisor_rows()
         except SessionExpiredError as e:
-            notify("session_expired", f"Motley Fool session expired: {e}", dedupe_key=f"session_expired:{date.today()}")
+            notify(
+                "session_expired",
+                f"Motley Fool session expired: {e}",
+                dedupe_key=f"session_expired:{date.today()}",
+            )
             raise
         except Exception:
             if n == attempts:
@@ -115,7 +123,17 @@ def main() -> None:
         return
     logger.info(f"Scraped {len(rows)} Stock Advisor rows.")
 
-    new_picks = ingest_scraped_rows(rows, seed_baseline=False)
+    # First run on a machine with no state: record what's already on the page as known, so the
+    # whole existing New Recs table isn't mistaken for new picks and bought.
+    first_run = not state.STATE_PATH.exists()
+    new_picks = ingest_scraped_rows(rows, seed_baseline=first_run)
+    if first_run:
+        logger.info(f"First run: seeded {len(rows)} existing recs as baseline; nothing traded.")
+        notify(
+            "pipeline",
+            f"First run on this machine: {len(rows)} existing recs recorded as baseline, none traded.",
+        )
+        return
     if not new_picks:
         logger.info("No new picks or sell signals since last run.")
         return

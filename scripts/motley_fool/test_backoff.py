@@ -54,3 +54,31 @@ def test_expired_session_alerts_once_and_is_not_retried(monkeypatch, tmp_path):
             ai_reconcile.scrape_politely(sleep=lambda s: pytest.fail("must not retry"))
     found = [a for a in alerts.load_alerts() if a["kind"] == "session_expired"]
     assert len(found) == 1
+
+
+def test_first_run_seeds_baseline_and_trades_nothing(monkeypatch):
+    import alerts
+    import state
+
+    rows = [{"symbol": "AAA", "action": "Buy"}, {"symbol": "BBB", "action": "Buy"}]
+    monkeypatch.setattr(ai_reconcile, "check_stop_losses", lambda c: [])
+    monkeypatch.setattr(ai_reconcile, "_client", lambda: None)
+    monkeypatch.setattr(ai_reconcile, "scrape_stock_advisor_rows", lambda: rows)
+    monkeypatch.setattr(
+        ai_reconcile, "process_pick", lambda p: pytest.fail("must not trade on first run")
+    )
+    ai_reconcile.main()
+    assert {p["status"] for p in state.load_state()["picks"].values()} == {"baseline"}
+    assert alerts.load_alerts()[0]["kind"] == "pipeline"
+
+    # a later run with one genuinely new rec processes only that one
+    backoff.LAST_HIT_PATH.unlink()
+    seen = []
+    monkeypatch.setattr(ai_reconcile, "process_pick", lambda p: seen.append(p["symbol"]))
+    monkeypatch.setattr(
+        ai_reconcile,
+        "scrape_stock_advisor_rows",
+        lambda: rows + [{"symbol": "NEW", "action": "Buy"}],
+    )
+    ai_reconcile.main()
+    assert seen == ["NEW"]
