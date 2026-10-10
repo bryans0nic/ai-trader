@@ -133,3 +133,9 @@ def test_keys_saved_to_env_and_never_shown(server, tmp_path, monkeypatch):
             urllib.request.Request(server + "/keys", data=b"api_key=abc%0AX=1&secret_key=short")
         )
     assert e.value.code == 400
+
+
+def test_home_screen_icon(server):
+    assert "rel=apple-touch-icon" in get(server + "/")
+    r = urllib.request.urlopen(server + "/apple-touch-icon.png")
+    assert r.headers["Content-Type"] == "image/png" and r.read()[:4] == b"\x89PNG"

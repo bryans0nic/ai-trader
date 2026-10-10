@@ -25,6 +25,7 @@ from dotenv import load_dotenv, set_key
 
 PORT = 8765
 ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
+ICON_PATH = Path(__file__).resolve().parent / "icon.png"
 KEY_RE = re.compile(r"[A-Za-z0-9]{16,128}")
 TAILSCALE_APP_BIN = "/Applications/Tailscale.app/Contents/MacOS/Tailscale"
 
@@ -240,6 +241,8 @@ def page(body: str, title: str = "Trader dashboard") -> bytes:
     return (
         "<!doctype html><html lang=en><meta charset=utf-8>"
         "<meta name=viewport content='width=device-width,initial-scale=1,viewport-fit=cover'>"
+        "<link rel=apple-touch-icon href=/apple-touch-icon.png><link rel=icon type=image/png href=/apple-touch-icon.png>"
+        "<meta name=apple-mobile-web-app-title content=Trader><meta name=theme-color content=#0f1115>"
         f"<title>{escape(title)}</title>{STYLE}<main><header><h1>{escape(title)}</h1></header>{body}</main></html>"
     ).encode()
 
@@ -286,12 +289,20 @@ def decision_page(decision_id: int) -> bytes | None:
 
 def make_handler(client_factory, allowed_hosts: set[str], refresh_hosts=None):
     class Handler(BaseHTTPRequestHandler):
-        def _send(self, status: int, body: bytes = b"", location: str | None = None):
+        def _send(
+            self,
+            status: int,
+            body: bytes = b"",
+            location: str | None = None,
+            ctype: str = "text/html; charset=utf-8",
+        ):
             self.send_response(status)
             if location:
                 self.send_header("Location", location)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Type", ctype)
+            self.send_header(
+                "Cache-Control", "max-age=86400" if ctype == "image/png" else "no-store"
+            )
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
@@ -312,6 +323,12 @@ def make_handler(client_factory, allowed_hosts: set[str], refresh_hosts=None):
             if path == "/":
                 saved = parse_qs(url.query).get("saved", [""])[0]
                 return self._send(200, index_page(client_factory, saved))
+            if path in (
+                "/apple-touch-icon.png",
+                "/apple-touch-icon-precomposed.png",
+                "/favicon.ico",
+            ):
+                return self._send(200, ICON_PATH.read_bytes(), ctype="image/png")
             if path.startswith("/decision/") and path[10:].isdigit():
                 body = decision_page(int(path[10:]))
                 return self._send(200, body) if body else self._send(404, b"not found")
