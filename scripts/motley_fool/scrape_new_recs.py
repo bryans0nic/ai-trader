@@ -17,6 +17,10 @@ SESSION_PATH = Path(__file__).resolve().parents[2] / "data" / "motley_fool" / "s
 NEW_RECS_URL = "https://www.fool.com/premium/new-recs"
 STOCK_ADVISOR_SLUG = "/premium/my-services/stock-advisor"
 
+class SessionExpiredError(RuntimeError):
+    """Saved Motley Fool login is missing/expired: needs a human to re-run login_and_save_session.py."""
+
+
 _EXTRACT_ROWS_JS = """
 () => {
   const table = document.querySelector('table');
@@ -48,7 +52,7 @@ _EXTRACT_ROWS_JS = """
 
 def scrape_stock_advisor_rows() -> list[dict]:
     if not SESSION_PATH.exists():
-        raise RuntimeError(
+        raise SessionExpiredError(
             f"No saved session at {SESSION_PATH}. "
             "Run: uv run python scripts/motley_fool/login_and_save_session.py"
         )
@@ -64,7 +68,7 @@ def scrape_stock_advisor_rows() -> list[dict]:
 
         if "/premium" not in page.url:
             browser.close()
-            raise RuntimeError(
+            raise SessionExpiredError(
                 f"Redirected to {page.url} -- session likely expired. "
                 "Re-run: uv run python scripts/motley_fool/login_and_save_session.py"
             )
@@ -81,7 +85,7 @@ def scrape_stock_advisor_rows() -> list[dict]:
             )
         except Exception as e:
             browser.close()
-            raise RuntimeError(
+            raise SessionExpiredError(
                 "New Recs table did not finish loading -- session may have expired or the "
                 "page layout changed. Re-run login_and_save_session.py or check the page manually."
             ) from e

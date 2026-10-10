@@ -1,7 +1,7 @@
 """
 End-to-end unattended run: scrape Motley Fool Stock Advisor's New Recs
-(deterministic), detect anything new since the last run, have the local Qwen
-model decide what to do with each new signal, and execute the resulting
+(deterministic), detect anything new since the last run, have Claude
+decide what to do with each new signal, and execute the resulting
 trade against the Alpaca paper account. Every AI decision is appended to
 data/motley_fool/decisions.jsonl with its full reasoning, whether or not it
 led to a trade.
@@ -16,12 +16,22 @@ Usage:
 """
 
 import sys
+import time
+from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from ai_decide import decide  # noqa: E402
-from portfolio import _client, current_holdings, exit_position, reconcile_new_pick  # noqa: E402
-from scrape_new_recs import scrape_stock_advisor_rows  # noqa: E402
+from alerts import notify  # noqa: E402
+from backoff import RETRY_BASE_S, may_hit_site, record_hit, retry_wait  # noqa: E402
+from portfolio import (  # noqa: E402
+    _client,
+    check_stop_losses,
+    current_holdings,
+    exit_position,
+    reconcile_new_pick,
+)
+from scrape_new_recs import SessionExpiredError, scrape_stock_advisor_rows  # noqa: E402
 from state import ingest_scraped_rows, load_state, save_state, set_confidence  # noqa: E402
 
 from ai_trader.core.logging import get_logger  # noqa: E402
@@ -72,9 +82,37 @@ def process_pick(pick: dict) -> None:
         _set_status(symbol, "ignored")
 
 
+def scrape_politely(attempts: int = 4, sleep=time.sleep) -> list[dict] | None:
+    """Scrape at most once per MIN_INTERVAL_S across runs (None = skipped), retrying real
+    failures with doubling waits. An expired session raises an alert and is not retried."""
+    if not may_hit_site():
+        logger.info("Last site hit was too recent; skipping scrape this run.")
+        return None
+    record_hit()
+    for n in range(1, attempts + 1):
+        try:
+            return scrape_stock_advisor_rows()
+        except SessionExpiredError as e:
+            notify("session_expired", f"Motley Fool session expired: {e}", dedupe_key=f"session_expired:{date.today()}")
+            raise
+        except Exception:
+            if n == attempts:
+                raise
+            wait = retry_wait(n, RETRY_BASE_S)
+            logger.exception(f"Scrape failed (attempt {n}/{attempts}); retrying in {wait:.0f}s.")
+            sleep(wait)
+
+
 def main() -> None:
+    try:
+        check_stop_losses(_client())
+    except Exception:
+        logger.exception("Stop-loss check failed; continuing.")
+
     logger.info("Scraping Motley Fool Stock Advisor New Recs...")
-    rows = scrape_stock_advisor_rows()
+    rows = scrape_politely()
+    if rows is None:
+        return
     logger.info(f"Scraped {len(rows)} Stock Advisor rows.")
 
     new_picks = ingest_scraped_rows(rows, seed_baseline=False)

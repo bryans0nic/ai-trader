@@ -13,6 +13,7 @@ from being supplanted.
 
 import os
 import sys
+from datetime import date
 
 from alpaca.trading.client import TradingClient
 from alpaca.trading.enums import OrderSide, TimeInForce
@@ -20,6 +21,7 @@ from alpaca.trading.requests import MarketOrderRequest
 from dotenv import load_dotenv
 
 sys.path.insert(0, os.path.dirname(__file__))
+from alerts import get_settings, notify  # noqa: E402
 from state import get_confidence, load_state, save_state  # noqa: E402
 
 from ai_trader.core.logging import get_logger  # noqa: E402
@@ -46,6 +48,41 @@ def target_weight(confidence: float) -> float:
     return MIN_WEIGHT + (MAX_WEIGHT - MIN_WEIGHT) * (confidence / 100.0)
 
 
+def daily_loss_tripped(account) -> bool:
+    """True (and alerts once per day) when equity is down past the daily-loss limit vs last close."""
+    last_equity = float(account.last_equity)
+    if last_equity <= 0:
+        return False
+    change_pct = (float(account.equity) - last_equity) / last_equity * 100
+    limit = get_settings()["daily_loss_pct"]
+    if change_pct > -limit:
+        return False
+    notify(
+        "kill_switch",
+        f"Daily-loss kill switch tripped: portfolio {change_pct:.2f}% today (limit -{limit:g}%). New buys halted.",
+        dedupe_key=f"kill_switch:{date.today().isoformat()}",
+    )
+    return True
+
+
+def check_stop_losses(trading_client: TradingClient) -> list[str]:
+    """Sell any holding whose unrealized loss is past the stop-loss limit. Returns symbols sold."""
+    limit = get_settings()["stop_loss_pct"]
+    sold = []
+    for p in trading_client.get_all_positions():
+        loss_pct = float(p.unrealized_plpc) * 100
+        if loss_pct > -limit:
+            continue
+        trading_client.close_position(p.symbol)
+        sold.append(p.symbol)
+        notify("stop_loss", f"Stop-loss: sold {p.symbol} at {loss_pct:.2f}% (limit -{limit:g}%).")
+        state = load_state()
+        if p.symbol in state["picks"]:
+            state["picks"][p.symbol]["status"] = "stopped_out"
+            save_state(state)
+    return sold
+
+
 def current_holdings(trading_client: TradingClient) -> list[dict]:
     positions = trading_client.get_all_positions()
     holdings = []
@@ -65,6 +102,13 @@ def reconcile_new_pick(symbol: str) -> None:
     account = trading_client.get_account()
     portfolio_value = float(account.portfolio_value)
     holdings = current_holdings(trading_client)
+
+    if daily_loss_tripped(account):
+        logger.warning(f"Kill switch active; not buying {symbol}.")
+        state = load_state()
+        state["picks"][symbol]["status"] = "halted_kill_switch"
+        save_state(state)
+        return
 
     already_held = any(h["symbol"] == symbol for h in holdings)
     if already_held:
