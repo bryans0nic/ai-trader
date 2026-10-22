@@ -41,7 +41,7 @@ The Motley Fool trading pipeline tells you when it fails or trips a loss limit, 
   Check: Change a limit value, rerun the loss-limit tests, and see the new value take effect.
 
 ### Pipeline tests
-- [ ] S11 Test the saving of new picks: duplicates ignored and first-run baseline (#4)
+- [x] S11 Test the saving of new picks: duplicates ignored and first-run baseline (#4)
   Check: Run `pytest -k state`: duplicate picks are ingested once and baseline seeding passes.
 - [ ] S12 Test position sizing, swapping at the 10-position cap, and low buying power (#4)
   Check: Run `pytest -k portfolio`: sizing, swap, already-held and low-cash cases pass.
@@ -87,3 +87,4 @@ The Motley Fool trading pipeline tells you when it fails or trips a loss limit, 
 - Assumption: if the push service needs an account or key you haven't set up, alert steps are built but marked untested in the PR.
 
 ## Log
+- S11: no code change. `scripts/motley_fool/test_state.py` (already on base) covers duplicates-once and baseline seeding; `pytest -k state` in scripts/motley_fool: 3 passed. Assumption: the existing tests meet the step, so no new test file. Ran with `uv run --no-project --with pytest --with pytest-cov` since the repo venv has no pytest.
