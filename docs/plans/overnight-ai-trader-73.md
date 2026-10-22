@@ -59,7 +59,7 @@ The Motley Fool trading pipeline tells you when it fails or trips a loss limit, 
   Check: Run the summary and see totals for ignores, buys, and difference from the S&P 500.
 
 ### Live trading gate
-- [ ] S18 Write the paper-to-live checklist with a link to each finished item (#7)
+- [x] S18 Write the paper-to-live checklist with a link to each finished item (#7)
   Check: Open the checklist and confirm every item points to a finished issue or a clear measure.
 - [ ] S19 Add a required human sign-off line before switching off paper mode (#7)
   Check: Read the checklist and confirm the sign-off line names who approves and what they review.
@@ -87,3 +87,4 @@ The Motley Fool trading pipeline tells you when it fails or trips a loss limit, 
 - Assumption: if the push service needs an account or key you haven't set up, alert steps are built but marked untested in the PR.
 
 ## Log
+- S18: Rewrote docs/paper-to-live-checklist.md so each item links its issue plus proof (file, function, test names) or a measure. Added measures to the 3 open items (sector limit 30%, 60 paper days and 10 buys beating the S&P 500, no unexplained alerts in 30 days). Left the existing sign-off line for S19. Assumption: the checklist already existed from an earlier PR, so I edited it; the thresholds are my guesses. Check run: all linked files, functions and tests exist, and `pytest scripts/motley_fool` passes (41). Note: the issues are still open on GitHub (they close when the PR merges), and gh could not reach GitHub from here (certificate error).
