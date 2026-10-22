@@ -43,7 +43,7 @@ The Motley Fool trading pipeline tells you when it fails or trips a loss limit, 
 ### Pipeline tests
 - [x] S11 Test the saving of new picks: duplicates ignored and first-run baseline (#4)
   Check: Run `pytest -k state`: duplicate picks are ingested once and baseline seeding passes.
-- [ ] S12 Test position sizing, swapping at the 10-position cap, and low buying power (#4)
+- [x] S12 Test position sizing, swapping at the 10-position cap, and low buying power (#4)
   Check: Run `pytest -k portfolio`: sizing, swap, already-held and low-cash cases pass.
 - [ ] S13 Test reading the AI's answer, including the broken-answer fallback (#4)
   Check: Run `pytest -k decide`: good, malformed and empty answers each give the expected decision.
@@ -88,3 +88,4 @@ The Motley Fool trading pipeline tells you when it fails or trips a loss limit, 
 
 ## Log
 - S11: no code change. `scripts/motley_fool/test_state.py` (already on base) covers duplicates-once and baseline seeding; `pytest -k state` in scripts/motley_fool: 3 passed. Assumption: the existing tests meet the step, so no new test file. Ran with `uv run --no-project --with pytest --with pytest-cov` since the repo venv has no pytest.
+- S12: sizing, 10-position swap and low-cash cases were already tested in `test_portfolio.py` (left untouched); added `scripts/motley_fool/test_portfolio_held.py` for the missing already-held case. `pytest -k portfolio`: 12 passed. Needed `--with alpaca-py --with python-dotenv --with-editable ../..` in the uv run.
