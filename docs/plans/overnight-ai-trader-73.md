@@ -31,7 +31,7 @@ The Motley Fool trading pipeline tells you when it fails or trips a loss limit, 
   Check: Run `pytest -k backoff`: wait times grow per failure, hit a cap, and reset after success.
 
 ### Loss limits
-- [ ] S7 Add a per-position stop-loss that sells a holding once it falls past a set percent (#1)
+- [x] S7 Add a per-position stop-loss that sells a holding once it falls past a set percent (#1)
   Check: Run `pytest -k stop_loss`: a position down past the limit is sold, one inside it is kept.
 - [ ] S8 Add a daily portfolio loss limit that halts new buys when hit (#1)
   Check: Run `pytest -k daily_loss`: buys are blocked after the limit trips and allowed before it.
@@ -87,3 +87,4 @@ The Motley Fool trading pipeline tells you when it fails or trips a loss limit, 
 - Assumption: if the push service needs an account or key you haven't set up, alert steps are built but marked untested in the PR.
 
 ## Log
+- S7: no code change needed; the stop-loss already shipped in PR #13 (`portfolio.check_stop_losses`, run at the start of every `ai_reconcile.py` pass, default 10% from settings.json). `pytest -k stop_loss` passes 3/3: BAD at -12% is sold, OK at -5% is kept. Ran with the main checkout venv plus a temp pytest (`-o addopts=` since pytest-cov is not installed there).
