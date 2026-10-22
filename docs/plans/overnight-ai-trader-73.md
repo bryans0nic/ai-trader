@@ -23,7 +23,7 @@ The Motley Fool trading pipeline tells you when it fails or trips a loss limit, 
   Check: Trigger two failed runs back to back and confirm only one alert arrives.
 
 ### Polite scraping
-- [ ] S4 Send an alert when the saved Motley Fool login has expired (#3, #8)
+- [x] S4 Send an alert when the saved Motley Fool login has expired (#3, #8)
   Check: Point the scraper at an invalid saved login and confirm an alert arrives naming the expiry.
 - [ ] S5 Enforce a minimum wait between real site visits, however often the script runs (#3, #8)
   Check: Run the scraper twice in a row and confirm the second run skips the site and says why.
@@ -87,3 +87,4 @@ The Motley Fool trading pipeline tells you when it fails or trips a loss limit, 
 - Assumption: if the push service needs an account or key you haven't set up, alert steps are built but marked untested in the PR.
 
 ## Log
+- S4: fool.com sends a bad login to /premium/api/auth/signin, which the old "/premium" test missed (vague 15s timeout instead), and a corrupt session file was retried 4x with no alert; scraper now checks the real new-recs path and validates the file, so both raise SessionExpiredError and send one session_expired alert via alerts.notify (test_session_expiry.py). Assumption: a real Chrome can't launch inside this sandbox, so the check ran the real scraper/alert code with a stand-in browser replaying the redirect seen with curl; phone delivery rides on notify() once S1 lands.

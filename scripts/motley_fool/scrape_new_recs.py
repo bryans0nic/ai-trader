@@ -9,7 +9,9 @@ if the session has expired (redirected to a login page / table not found)
 rather than silently returning nothing.
 """
 
+import json
 from pathlib import Path
+from urllib.parse import urlparse
 
 from playwright.sync_api import sync_playwright
 
@@ -57,6 +59,13 @@ def scrape_stock_advisor_rows() -> list[dict]:
             f"No saved session at {SESSION_PATH}. "
             "Run: uv run python scripts/motley_fool/login_and_save_session.py"
         )
+    try:
+        json.loads(SESSION_PATH.read_text())
+    except (OSError, ValueError) as e:
+        raise SessionExpiredError(
+            f"Saved session at {SESSION_PATH} is unreadable ({e}). "
+            "Re-run: uv run python scripts/motley_fool/login_and_save_session.py"
+        ) from e
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -67,7 +76,8 @@ def scrape_stock_advisor_rows() -> list[dict]:
         # actual table selector below instead, which is the real readiness signal.
         page.goto(NEW_RECS_URL, wait_until="load")
 
-        if "/premium" not in page.url:
+        # A bad login lands on /premium/api/auth/signin, so "/premium" alone isn't enough.
+        if not urlparse(page.url).path.startswith("/premium/new-recs"):
             browser.close()
             raise SessionExpiredError(
                 f"Redirected to {page.url} -- session likely expired. "
