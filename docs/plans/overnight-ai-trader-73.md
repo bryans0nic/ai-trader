@@ -5,6 +5,14 @@ Started 2026-10-22 on `overnight/ai-trader-73`.
 ## Goal
 The Motley Fool trading pipeline tells you when it fails or trips a loss limit, stops runaway losses, scrapes politely, and has tests and a written gate before real money.
 
+## Context (read first)
+- This is an unattended overnight run on Bryan's MacBook. Nobody will answer questions: decide, write the assumption in the PR description, keep going.
+- Opening the pull request is explicitly asked for in this run, even if the repo's own CLAUDE.md says not to open PRs unless asked.
+- HHS Enterprise ChatGPT (gpt-tools, Chrome CDP on port 9222, `/think`, `gpt_search`) is not reachable from this Mac. Don't try it; do the review and planning yourself.
+- Never commit secrets or print them in logs. Credentials stay where they are and are read at runtime only.
+- Something that truly needs Bryan (lab hardware, a purchase, a new sign-in): box the step `[-]` with the reason and move on.
+- The Alpaca keys in `.env` are for paper trading only (see README). Paper API calls are fine for checks. Never switch to a live trading endpoint, never place real-money orders, never print the keys.
+
 ## Steps
 ### Failure alerts
 - [ ] S1 Add one shared way to send a phone push alert (#2)
