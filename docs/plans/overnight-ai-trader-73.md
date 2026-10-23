@@ -55,7 +55,7 @@ The Motley Fool trading pipeline tells you when it fails or trips a loss limit, 
   Check: Run the tracker on the saved decisions and see a return figure for each ignore.
 - [x] S16 Compare each buy's return to the S&P 500 (#6)
   Check: Run the tracker and see each buy listed next to the S&P 500 over the same dates.
-- [ ] S17 Add a one-page summary of AI wins versus benchmark (#6)
+- [x] S17 Add a one-page summary of AI wins versus benchmark (#6)
   Check: Run the summary and see totals for ignores, buys, and difference from the S&P 500.
 
 ### Live trading gate
@@ -89,3 +89,4 @@ The Motley Fool trading pipeline tells you when it fails or trips a loss limit, 
 ## Log
 S15: each decision now logs the price at decision time (`price` in decisions.jsonl); new `track_ignored.py` prints the return since for every ignore (logged price to latest, older records fall back to that day's close), and the dashboard uses the same figure. Checked on a sample log: AAPL +5.5%, MSFT +0.7%; 43 tests pass. Assumption: the real decisions.jsonl is empty, so the check ran on a sample file.
 S16: `metrics.buys_vs_sp500` and `track_ignored.py` now list each buy next to the S&P 500 from the same decision date to now, with the difference. Checked on the sample log (NVDA with a made-up $100 entry price, so its +112% is not real); 44 tests pass. S&P 500 start is that day's close, as in the existing dashboard tiles.
+S17: new `summary.py` prints a short summary (ignores: count, average move, how many were right; buys: count, average return, how many beat the S&P 500; S&P 500 over the same dates; buys minus S&P 500), backed by `metrics.summarize`. Checked on the sample log (made-up NVDA price, so +113% is not real); 46 tests pass. Assumptions: an ignore counts as right if the stock fell or stayed flat; picks with no price yet are left out of the totals.

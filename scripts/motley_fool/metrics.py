@@ -122,6 +122,23 @@ def buys_vs_sp500(decisions: list[dict]) -> list[dict]:
     return rows
 
 
+def summarize(decisions: list[dict]) -> dict:
+    """Totals for the one-page summary. An ignore wins if the stock fell afterward, a buy wins
+    if it beat the S&P 500 over the same dates. Picks with no price yet are left out."""
+    ign = [r["change_pct"] for r in ignored_performance(decisions) if r["change_pct"] is not None]
+    buys = [b for b in buys_vs_sp500(decisions) if b["diff_pct"] is not None]
+    return {
+        "ignores": len(ign),
+        "ignores_avg": _avg(ign),
+        "ignores_won": sum(v <= 0 for v in ign),
+        "buys": len(buys),
+        "buys_avg": _avg([b["change_pct"] for b in buys]),
+        "sp500_avg": _avg([b["sp500_pct"] for b in buys]),
+        "diff_avg": _avg([b["diff_pct"] for b in buys]),
+        "buys_won": sum(b["diff_pct"] > 0 for b in buys),
+    }
+
+
 def _avg(values: list[float | None]) -> float | None:
     vals = [v for v in values if v is not None]
     return sum(vals) / len(vals) if vals else None
