@@ -100,7 +100,7 @@ def notify(
     """Append an alert. With dedupe_key, an alert with the same key is only recorded once
     (or, with `within`, once per that window). Returns True if recorded."""
     if dedupe_key:
-        cutoff = (datetime.now(UTC) - within).isoformat() if within else ""
+        cutoff = (datetime.now(UTC) - within).isoformat() if within is not None else ""
         if any(a.get("dedupe_key") == dedupe_key and a["timestamp"] > cutoff for a in load_alerts()):
             return False
     ALERTS_PATH.parent.mkdir(parents=True, exist_ok=True)
