@@ -76,19 +76,67 @@ def _day(record: dict) -> str:
     return record["timestamp"][:10]
 
 
+def _return_since_decision(record: dict) -> float | None:
+    """% change from the price logged with the decision (older records: that day's close) to now."""
+    logged = record.get("price")
+    if not logged:
+        return pct_change_since(record["symbol"], _day(record))
+    try:
+        now = latest_price(record["symbol"])
+    except Exception:
+        return None
+    return None if now is None else (now - logged) / logged * 100
+
+
 def ignored_performance(decisions: list[dict]) -> list[dict]:
     """Each ignored pick with its price change since the decision (newest first)."""
-    rows = [
+    return [
         {
             "id": r.get("id"),
             "symbol": r["symbol"],
             "day": _day(r),
-            "change_pct": pct_change_since(r["symbol"], _day(r)),
+            "price": r.get("price"),
+            "change_pct": _return_since_decision(r),
         }
         for r in decisions
         if r["decision"]["action"] == "ignore"
     ]
+
+
+def buys_vs_sp500(decisions: list[dict]) -> list[dict]:
+    """Each buy's return since the decision next to the S&P 500 over the same dates."""
+    rows = []
+    for r in decisions:
+        if r["decision"]["action"] != "buy":
+            continue
+        ours, sp = _return_since_decision(r), pct_change_since(BENCHMARK, _day(r))
+        rows.append(
+            {
+                "symbol": r["symbol"],
+                "day": _day(r),
+                "change_pct": ours,
+                "sp500_pct": sp,
+                "diff_pct": None if ours is None or sp is None else ours - sp,
+            }
+        )
     return rows
+
+
+def summarize(decisions: list[dict]) -> dict:
+    """Totals for the one-page summary. An ignore wins if the stock fell afterward, a buy wins
+    if it beat the S&P 500 over the same dates. Picks with no price yet are left out."""
+    ign = [r["change_pct"] for r in ignored_performance(decisions) if r["change_pct"] is not None]
+    buys = [b for b in buys_vs_sp500(decisions) if b["diff_pct"] is not None]
+    return {
+        "ignores": len(ign),
+        "ignores_avg": _avg(ign),
+        "ignores_won": sum(v <= 0 for v in ign),
+        "buys": len(buys),
+        "buys_avg": _avg([b["change_pct"] for b in buys]),
+        "sp500_avg": _avg([b["sp500_pct"] for b in buys]),
+        "diff_avg": _avg([b["diff_pct"] for b in buys]),
+        "buys_won": sum(b["diff_pct"] > 0 for b in buys),
+    }
 
 
 def _avg(values: list[float | None]) -> float | None:

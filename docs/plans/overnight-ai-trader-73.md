@@ -1,0 +1,110 @@
+# Trading safety, alerts and tests
+
+Started 2026-10-22 on `overnight/ai-trader-73`.
+
+## Goal
+The Motley Fool trading pipeline tells you when it fails or trips a loss limit, stops runaway losses, scrapes politely, and has tests and a written gate before real money.
+
+## Context (read first)
+- This is an unattended overnight run on Bryan's MacBook. Nobody will answer questions: decide, write the assumption in the PR description, keep going.
+- Opening the pull request is explicitly asked for in this run, even if the repo's own CLAUDE.md says not to open PRs unless asked.
+- HHS Enterprise ChatGPT (gpt-tools, Chrome CDP on port 9222, `/think`, `gpt_search`) is not reachable from this Mac. Don't try it; do the review and planning yourself.
+- Never commit secrets or print them in logs. Credentials stay where they are and are read at runtime only.
+- Something that truly needs Bryan (lab hardware, a purchase, a new sign-in): box the step `[-]` with the reason and move on.
+- The Alpaca keys in `.env` are for paper trading only (see README). Paper API calls are fine for checks. Never switch to a live trading endpoint, never place real-money orders, never print the keys.
+
+## Steps
+### Failure alerts
+- [-] S1 Add one shared way to send a phone push alert (#2)
+  Check: Run the alert on its own with a test message and see it arrive on your phone.
+- [x] S2 Send an alert when a scheduled run can't reach the local model (#2)
+  Check: Stop LM Studio, trigger a run, and confirm an alert arrives and the run still logs the failure.
+- [x] S3 Skip the alert when the same failure was already reported recently (#2)
+  Check: Trigger two failed runs back to back and confirm only one alert arrives.
+
+### Polite scraping
+- [x] S4 Send an alert when the saved Motley Fool login has expired (#3, #8)
+  Check: Point the scraper at an invalid saved login and confirm an alert arrives naming the expiry.
+- [x] S5 Enforce a minimum wait between real site visits, however often the script runs (#3, #8)
+  Check: Run the scraper twice in a row and confirm the second run skips the site and says why.
+- [x] S6 Add growing waits after repeated scrape failures, reset on success (#3, #8)
+  Check: Run `pytest -k backoff`: wait times grow per failure, hit a cap, and reset after success.
+
+### Loss limits
+- [x] S7 Add a per-position stop-loss that sells a holding once it falls past a set percent (#1)
+  Check: Run `pytest -k stop_loss`: a position down past the limit is sold, one inside it is kept.
+- [x] S8 Add a daily portfolio loss limit that halts new buys when hit (#1)
+  Check: Run `pytest -k daily_loss`: buys are blocked after the limit trips and allowed before it.
+- [x] S9 Send an alert whenever the stop-loss or daily loss limit trips (#1)
+  Check: Run a paper cycle with a lowered limit and confirm an alert arrives for the trip.
+- [x] S10 Keep the limits paper-account only and make them easy to change (#1)
+  Check: Change a limit value, rerun the loss-limit tests, and see the new value take effect.
+
+### Pipeline tests
+- [x] S11 Test the saving of new picks: duplicates ignored and first-run baseline (#4)
+  Check: Run `pytest -k state`: duplicate picks are ingested once and baseline seeding passes.
+- [x] S12 Test position sizing, swapping at the 10-position cap, and low buying power (#4)
+  Check: Run `pytest -k portfolio`: sizing, swap, already-held and low-cash cases pass.
+- [x] S13 Test reading the AI's answer, including the broken-answer fallback (#4)
+  Check: Run `pytest -k decide`: good, malformed and empty answers each give the expected decision.
+- [x] S14 Test the scraper's loading-placeholder handling without opening the real site (#4)
+  Check: Run `pytest -k scrape`: placeholder pages are retried and real pages are read.
+
+### Performance tracking
+- [x] S15 Record what each ignored pick did afterward, using logged prices (#6)
+  Check: Run the tracker on the saved decisions and see a return figure for each ignore.
+- [x] S16 Compare each buy's return to the S&P 500 (#6)
+  Check: Run the tracker and see each buy listed next to the S&P 500 over the same dates.
+- [x] S17 Add a one-page summary of AI wins versus benchmark (#6)
+  Check: Run the summary and see totals for ignores, buys, and difference from the S&P 500.
+
+### Live trading gate
+- [x] S18 Write the paper-to-live checklist with a link to each finished item (#7)
+  Check: Open the checklist and confirm every item points to a finished issue or a clear measure.
+- [x] S19 Add a required human sign-off line before switching off paper mode (#7)
+  Check: Read the checklist and confirm the sign-off line names who approves and what they review.
+
+## Done when
+- Closing the model server or letting the login expire sends a phone alert, not just a log line.
+- Repeated script runs don't hit the site more often than the minimum wait, and failures back off.
+- A losing position is sold and a bad day halts buys, with an alert each time.
+- Tests for the saving, sizing, answer-reading and scraper rules pass.
+- A summary shows AI decisions against the S&P 500.
+- The graduation checklist exists with a human sign-off line.
+- The PR description lists every assumption, has 'Closes #N' for each finished issue, and says why any skipped issue was skipped.
+
+## Out of scope
+- #5 Sector/correlation limits: needs a sector data source chosen first. Skip and say so in the PR.
+- Tracking how long logins last to re-login ahead of time (bonus in #3).
+- Motley Fool's Stock Advisor scorecard comparison in #6; only the S&P 500 comparison is built.
+- Exiting every position on a daily loss trip; only halting new buys is built.
+- Any switch to real-money trading.
+
+## Open questions
+- Assumption for the PR: alerts go out as a phone push through a free push service, since it's the easiest to set up. Change if you prefer email.
+- Assumption: stop-loss starts at 10% below buy price and daily loss limit at 3% of the account. These are guesses.
+- Assumption: #3 and #8 are handled together as asked, though they are different problems (expiry alert versus polite scraping). Both get 'Closes' lines.
+- Assumption: if the push service needs an account or key you haven't set up, alert steps are built but marked untested in the PR.
+
+## Log
+- S18: Rewrote docs/paper-to-live-checklist.md so each item links its issue plus proof (file, function, test names) or a measure. Added measures to the 3 open items (sector limit 30%, 60 paper days and 10 buys beating the S&P 500, no unexplained alerts in 30 days). Left the existing sign-off line for S19. Assumption: the checklist already existed from an earlier PR, so I edited it; the thresholds are my guesses. Check run: all linked files, functions and tests exist, and `pytest scripts/motley_fool` passes (41). Note: the issues are still open on GitHub (they close when the PR merges), and gh could not reach GitHub from here (certificate error).
+- S19: Replaced the vague "Owner" sign-off in docs/paper-to-live-checklist.md with a required section: approver is Bryan (repo owner), a list of what they review (ticked boxes, dashboard history, alert log, limits and amount), and a rule that `paper=True` stays until it is signed. Assumption: "owner" means Bryan since they own the repo; the checklist is documentation only, no code enforces it. Check: read the section and it names the approver and the review items.
+- S11: no code change. `scripts/motley_fool/test_state.py` (already on base) covers duplicates-once and baseline seeding; `pytest -k state` in scripts/motley_fool: 3 passed. Assumption: the existing tests meet the step, so no new test file. Ran with `uv run --no-project --with pytest --with pytest-cov` since the repo venv has no pytest.
+- S12: sizing, 10-position swap and low-cash cases were already tested in `test_portfolio.py` (left untouched); added `scripts/motley_fool/test_portfolio_held.py` for the missing already-held case. `pytest -k portfolio`: 12 passed. Needed `--with alpaca-py --with python-dotenv --with-editable ../..` in the uv run.
+- S13: no code change. `test_ai_decide.py` (already on base) covers good, empty, malformed and call-failure answers falling back to ignore; `pytest -k decide`: 9 passed.
+- S14: no scraper test existed; added `scripts/motley_fool/test_scrape.py` using a fake browser (real site never opened): real rows read and filtered to Stock Advisor, placeholder rows that never clear fail loudly, zero rows and login redirect and missing session raise. Assumption: the scraper "retries" placeholders by Playwright polling `wait_for_function` until the skeletons are gone (no page reload), so the test covers that wait. `pytest -k scrape`: 6 passed (5 new + 1 existing name match). Needs `--with playwright` in the uv run.
+- S4: fool.com sends a bad login to /premium/api/auth/signin, which the old "/premium" test missed (vague 15s timeout instead), and a corrupt session file was retried 4x with no alert; scraper now checks the real new-recs path and validates the file, so both raise SessionExpiredError and send one session_expired alert via alerts.notify (test_session_expiry.py). Assumption: a real Chrome can't launch inside this sandbox, so the check ran the real scraper/alert code with a stand-in browser replaying the redirect seen with curl; phone delivery rides on notify() once S1 lands.
+- S5: the 15-minute minimum between site visits already guarded the pipeline (ai_reconcile.scrape_politely) but running scrape_new_recs.py directly skipped it and hit the site every time; it now goes through the same gate (shared last-hit file) and prints "Skipped: the site was visited less than 15 min ago. Try again in N min." (test_scrape_cli_wait.py). Checked with a stand-in browser: two runs in a row gave 1 site visit.
+- S6: retries inside one run already doubled (60s, 120s, 240s); added growth across runs: each consecutive failed run (including an expired login) doubles the required gap since the last visit, 15m, 15m, 30m, 1h ... capped at 6h, and a success resets it; stored as "failures" in the same last-visit file, and an unreadable file no longer blocks scraping; the pipeline and direct scraper runs both use it (test_backoff_across_runs.py). Assumptions: the first failure keeps the normal 15m gap, 6h cap.
+- S7: no code change needed; the stop-loss already shipped in PR #13 (`portfolio.check_stop_losses`, run at the start of every `ai_reconcile.py` pass, default 10% from settings.json). `pytest -k stop_loss` passes 3/3: BAD at -12% is sold, OK at -5% is kept. Ran with the main checkout venv plus a temp pytest (`-o addopts=` since pytest-cov is not installed there).
+- S8: no feature code needed; `portfolio.daily_loss_tripped` (PR #13) already halts new buys when equity is down past `daily_loss_pct` (default 5% in settings.json, not the 3% guessed in the plan; kept the existing value) vs last close. Its tests were named `kill_switch`, so `-k daily_loss` matched nothing; added `scripts/motley_fool/test_daily_loss.py` (blocked at -6%, allowed at -3%, limit adjustable). `pytest -k daily_loss` 3/3, full folder 44/44.
+- S9: both trips already call `alerts.notify` (kinds `stop_loss` and `kill_switch`, shown in the dashboard feed), so no feature code changed; added `scripts/motley_fool/test_loss_alerts.py` that lowers each limit and confirms one alert per trip and none inside limits (fake client, no real paper cycle: needs live Alpaca keys and market hours). These alerts reach the phone only once S1 hooks the push into `notify`; nothing here does that. Folder 47/47.
+- S10: no feature code needed; the Alpaca client is hardcoded `paper=True` (`portfolio._client`) with no live switch, and both limits are editable in `data/motley_fool/settings.json` or the dashboard Settings form (validated 0 to 100%). Added `scripts/motley_fool/test_paper_only.py` (client is always paper; no setting can turn it off). Check: temporarily set the `daily_loss_pct` default 5 -> 1, and the "allowed at -3%" tests flipped to blocked, so the new value is used; reverted. Folder 49/49.
+S15: each decision now logs the price at decision time (`price` in decisions.jsonl); new `track_ignored.py` prints the return since for every ignore (logged price to latest, older records fall back to that day's close), and the dashboard uses the same figure. Checked on a sample log: AAPL +5.5%, MSFT +0.7%; 43 tests pass. Assumption: the real decisions.jsonl is empty, so the check ran on a sample file.
+S16: `metrics.buys_vs_sp500` and `track_ignored.py` now list each buy next to the S&P 500 from the same decision date to now, with the difference. Checked on the sample log (NVDA with a made-up $100 entry price, so its +112% is not real); 44 tests pass. S&P 500 start is that day's close, as in the existing dashboard tiles.
+S17: new `summary.py` prints a short summary (ignores: count, average move, how many were right; buys: count, average return, how many beat the S&P 500; S&P 500 over the same dates; buys minus S&P 500), backed by `metrics.summarize`. Checked on the sample log (made-up NVDA price, so +113% is not real); 46 tests pass. Assumptions: an ignore counts as right if the stock fell or stayed flat; picks with no price yet are left out of the totals.
+- S1: `alerts.notify()` now also pushes to ntfy.sh (new `alerts.push()`, topic from `NTFY_TOPIC` in `.env`, skipped with a stderr note if unset, a failed push never stops a run, never fires under pytest); `python scripts/motley_fool/alerts.py "msg"` sends a test; added `NTFY_TOPIC` to `.env.example`, a README note, and `test_push.py`. All 43 motley_fool tests pass. Delivery to the ntfy server was confirmed by reading a throwaway topic back (title and message matched). Assumption: ntfy.sh with a secret topic name, per the plan.
+- Left for another run: S1 phone check. Bryan needs to install the ntfy app, subscribe to a long random topic, put it in `.env` as `NTFY_TOPIC=...`, then run `uv run python scripts/motley_fool/alerts.py "hello"` and see it arrive. No topic is set and no phone is reachable from this run.
+- Note: `python-dotenv` is not a declared dependency (only arrives transitively); a fresh `uv run` env lacked it, so tests were run with `uv run --with python-dotenv --with pytest --with pytest-cov pytest scripts/motley_fool --no-cov`.
+- S2: `ai_decide.decide()` now calls `notify("model_unreachable", ...)` when the model call fails, so a scheduled run gets an alert (dashboard + phone push) and still logs the `CALL_ERROR` decision to `decisions.jsonl`. New `test_model_alert.py`; 44 motley_fool tests pass. Check run: the model call was made to fail (`CLAUDE_BIN` pointed at a missing binary), the failure was logged, and the push arrived on a throwaway ntfy topic. Assumption: the plan says "LM Studio", but this pipeline's model is the Claude CLI (`claude -p`), so "can't reach the model" means that call failing; LM Studio isn't used here. Alert fires per failed pick; S3 handles repeats.
+- S3: `alerts.notify()` takes an optional `within` window so a `dedupe_key` only blocks repeats inside that window (old behaviour unchanged without it); model-unreachable alerts use key `model_unreachable` with a 6 hour window, so one outage sends one alert, not one per pick. New `test_alert_dedupe.py`; 46 motley_fool tests pass. Check run: two failing `decide()` calls back to back logged 2 decisions and delivered exactly 1 push to a throwaway ntfy topic. Assumption: 6 hours is a sensible "recently".

@@ -13,14 +13,17 @@ import json
 import os
 import re
 import subprocess
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+
+from alerts import notify
 
 CLAUDE_BIN = os.environ.get("CLAUDE_BIN", "claude")
 MODEL = os.environ.get(
     "TRADER_CLAUDE_MODEL", "sonnet"
 )  # alias; the model actually used is logged per decision
 CLAUDE_TIMEOUT_S = 180
+MODEL_ALERT_EVERY = timedelta(hours=6)  # one alert per outage, not one per failed pick
 
 ACTIONS = ("buy", "ignore", "exit")
 
@@ -126,11 +129,22 @@ def _parse_decision(raw_content: str) -> dict:
     return parsed
 
 
+def _price_now(symbol: str | None) -> float | None:
+    """Last price, logged with the decision so later returns don't depend on a re-lookup."""
+    try:
+        from metrics import latest_price
+
+        return latest_price(symbol) if symbol else None
+    except Exception:
+        return None  # a missing price must never block logging the decision
+
+
 def _log_decision(pick: dict, portfolio_context: dict, model_output: dict, decision: dict) -> None:
     DECISIONS_LOG.parent.mkdir(parents=True, exist_ok=True)
     record = {
         "timestamp": datetime.now(UTC).isoformat(),
         "symbol": pick.get("symbol"),
+        "price": _price_now(pick.get("symbol")),
         "signal": pick,
         "portfolio_snapshot": portfolio_context,
         "model": model_output["model"],
@@ -155,6 +169,12 @@ def decide(pick: dict, portfolio_context: dict) -> dict:
         # Claude unreachable / logged out / timed out: never trade on a failed call.
         model_output = {"content": "", "reasoning": "", "model": MODEL}
         decision = {"confidence": 0, "action": "ignore", "reasoning": f"CALL_ERROR: {e}"}
+        notify(
+            "model_unreachable",
+            f"AI model unreachable, no decision made for {pick.get('symbol')}: {e}",
+            dedupe_key="model_unreachable",
+            within=MODEL_ALERT_EVERY,
+        )
     else:
         try:
             decision = _parse_decision(model_output["content"])
