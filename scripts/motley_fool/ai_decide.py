@@ -16,6 +16,8 @@ import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 
+from alerts import notify
+
 CLAUDE_BIN = os.environ.get("CLAUDE_BIN", "claude")
 MODEL = os.environ.get(
     "TRADER_CLAUDE_MODEL", "sonnet"
@@ -155,6 +157,10 @@ def decide(pick: dict, portfolio_context: dict) -> dict:
         # Claude unreachable / logged out / timed out: never trade on a failed call.
         model_output = {"content": "", "reasoning": "", "model": MODEL}
         decision = {"confidence": 0, "action": "ignore", "reasoning": f"CALL_ERROR: {e}"}
+        notify(
+            "model_unreachable",
+            f"AI model unreachable, no decision made for {pick.get('symbol')}: {e}",
+        )
     else:
         try:
             decision = _parse_decision(model_output["content"])

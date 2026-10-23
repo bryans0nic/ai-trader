@@ -17,7 +17,7 @@ The Motley Fool trading pipeline tells you when it fails or trips a loss limit, 
 ### Failure alerts
 - [-] S1 Add one shared way to send a phone push alert (#2)
   Check: Run the alert on its own with a test message and see it arrive on your phone.
-- [ ] S2 Send an alert when a scheduled run can't reach the local model (#2)
+- [x] S2 Send an alert when a scheduled run can't reach the local model (#2)
   Check: Stop LM Studio, trigger a run, and confirm an alert arrives and the run still logs the failure.
 - [ ] S3 Skip the alert when the same failure was already reported recently (#2)
   Check: Trigger two failed runs back to back and confirm only one alert arrives.
@@ -90,3 +90,4 @@ The Motley Fool trading pipeline tells you when it fails or trips a loss limit, 
 - S1: `alerts.notify()` now also pushes to ntfy.sh (new `alerts.push()`, topic from `NTFY_TOPIC` in `.env`, skipped with a stderr note if unset, a failed push never stops a run, never fires under pytest); `python scripts/motley_fool/alerts.py "msg"` sends a test; added `NTFY_TOPIC` to `.env.example`, a README note, and `test_push.py`. All 43 motley_fool tests pass. Delivery to the ntfy server was confirmed by reading a throwaway topic back (title and message matched). Assumption: ntfy.sh with a secret topic name, per the plan.
 - Left for another run: S1 phone check. Bryan needs to install the ntfy app, subscribe to a long random topic, put it in `.env` as `NTFY_TOPIC=...`, then run `uv run python scripts/motley_fool/alerts.py "hello"` and see it arrive. No topic is set and no phone is reachable from this run.
 - Note: `python-dotenv` is not a declared dependency (only arrives transitively); a fresh `uv run` env lacked it, so tests were run with `uv run --with python-dotenv --with pytest --with pytest-cov pytest scripts/motley_fool --no-cov`.
+- S2: `ai_decide.decide()` now calls `notify("model_unreachable", ...)` when the model call fails, so a scheduled run gets an alert (dashboard + phone push) and still logs the `CALL_ERROR` decision to `decisions.jsonl`. New `test_model_alert.py`; 44 motley_fool tests pass. Check run: the model call was made to fail (`CLAUDE_BIN` pointed at a missing binary), the failure was logged, and the push arrived on a throwaway ntfy topic. Assumption: the plan says "LM Studio", but this pipeline's model is the Claude CLI (`claude -p`), so "can't reach the model" means that call failing; LM Studio isn't used here. Alert fires per failed pick; S3 handles repeats.
