@@ -47,7 +47,7 @@ The Motley Fool trading pipeline tells you when it fails or trips a loss limit, 
   Check: Run `pytest -k portfolio`: sizing, swap, already-held and low-cash cases pass.
 - [x] S13 Test reading the AI's answer, including the broken-answer fallback (#4)
   Check: Run `pytest -k decide`: good, malformed and empty answers each give the expected decision.
-- [ ] S14 Test the scraper's loading-placeholder handling without opening the real site (#4)
+- [x] S14 Test the scraper's loading-placeholder handling without opening the real site (#4)
   Check: Run `pytest -k scrape`: placeholder pages are retried and real pages are read.
 
 ### Performance tracking
@@ -90,3 +90,4 @@ The Motley Fool trading pipeline tells you when it fails or trips a loss limit, 
 - S11: no code change. `scripts/motley_fool/test_state.py` (already on base) covers duplicates-once and baseline seeding; `pytest -k state` in scripts/motley_fool: 3 passed. Assumption: the existing tests meet the step, so no new test file. Ran with `uv run --no-project --with pytest --with pytest-cov` since the repo venv has no pytest.
 - S12: sizing, 10-position swap and low-cash cases were already tested in `test_portfolio.py` (left untouched); added `scripts/motley_fool/test_portfolio_held.py` for the missing already-held case. `pytest -k portfolio`: 12 passed. Needed `--with alpaca-py --with python-dotenv --with-editable ../..` in the uv run.
 - S13: no code change. `test_ai_decide.py` (already on base) covers good, empty, malformed and call-failure answers falling back to ignore; `pytest -k decide`: 9 passed.
+- S14: no scraper test existed; added `scripts/motley_fool/test_scrape.py` using a fake browser (real site never opened): real rows read and filtered to Stock Advisor, placeholder rows that never clear fail loudly, zero rows and login redirect and missing session raise. Assumption: the scraper "retries" placeholders by Playwright polling `wait_for_function` until the skeletons are gone (no page reload), so the test covers that wait. `pytest -k scrape`: 6 passed (5 new + 1 existing name match). Needs `--with playwright` in the uv run.
