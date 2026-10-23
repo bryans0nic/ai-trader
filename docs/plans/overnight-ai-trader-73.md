@@ -51,11 +51,11 @@ The Motley Fool trading pipeline tells you when it fails or trips a loss limit, 
   Check: Run `pytest -k scrape`: placeholder pages are retried and real pages are read.
 
 ### Performance tracking
-- [ ] S15 Record what each ignored pick did afterward, using logged prices (#6)
+- [x] S15 Record what each ignored pick did afterward, using logged prices (#6)
   Check: Run the tracker on the saved decisions and see a return figure for each ignore.
-- [ ] S16 Compare each buy's return to the S&P 500 (#6)
+- [x] S16 Compare each buy's return to the S&P 500 (#6)
   Check: Run the tracker and see each buy listed next to the S&P 500 over the same dates.
-- [ ] S17 Add a one-page summary of AI wins versus benchmark (#6)
+- [x] S17 Add a one-page summary of AI wins versus benchmark (#6)
   Check: Run the summary and see totals for ignores, buys, and difference from the S&P 500.
 
 ### Live trading gate
@@ -100,3 +100,6 @@ The Motley Fool trading pipeline tells you when it fails or trips a loss limit, 
 - S8: no feature code needed; `portfolio.daily_loss_tripped` (PR #13) already halts new buys when equity is down past `daily_loss_pct` (default 5% in settings.json, not the 3% guessed in the plan; kept the existing value) vs last close. Its tests were named `kill_switch`, so `-k daily_loss` matched nothing; added `scripts/motley_fool/test_daily_loss.py` (blocked at -6%, allowed at -3%, limit adjustable). `pytest -k daily_loss` 3/3, full folder 44/44.
 - S9: both trips already call `alerts.notify` (kinds `stop_loss` and `kill_switch`, shown in the dashboard feed), so no feature code changed; added `scripts/motley_fool/test_loss_alerts.py` that lowers each limit and confirms one alert per trip and none inside limits (fake client, no real paper cycle: needs live Alpaca keys and market hours). These alerts reach the phone only once S1 hooks the push into `notify`; nothing here does that. Folder 47/47.
 - S10: no feature code needed; the Alpaca client is hardcoded `paper=True` (`portfolio._client`) with no live switch, and both limits are editable in `data/motley_fool/settings.json` or the dashboard Settings form (validated 0 to 100%). Added `scripts/motley_fool/test_paper_only.py` (client is always paper; no setting can turn it off). Check: temporarily set the `daily_loss_pct` default 5 -> 1, and the "allowed at -3%" tests flipped to blocked, so the new value is used; reverted. Folder 49/49.
+S15: each decision now logs the price at decision time (`price` in decisions.jsonl); new `track_ignored.py` prints the return since for every ignore (logged price to latest, older records fall back to that day's close), and the dashboard uses the same figure. Checked on a sample log: AAPL +5.5%, MSFT +0.7%; 43 tests pass. Assumption: the real decisions.jsonl is empty, so the check ran on a sample file.
+S16: `metrics.buys_vs_sp500` and `track_ignored.py` now list each buy next to the S&P 500 from the same decision date to now, with the difference. Checked on the sample log (NVDA with a made-up $100 entry price, so its +112% is not real); 44 tests pass. S&P 500 start is that day's close, as in the existing dashboard tiles.
+S17: new `summary.py` prints a short summary (ignores: count, average move, how many were right; buys: count, average return, how many beat the S&P 500; S&P 500 over the same dates; buys minus S&P 500), backed by `metrics.summarize`. Checked on the sample log (made-up NVDA price, so +113% is not real); 46 tests pass. Assumptions: an ignore counts as right if the stock fell or stayed flat; picks with no price yet are left out of the totals.
