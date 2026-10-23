@@ -25,7 +25,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import state  # noqa: E402
 from ai_decide import decide  # noqa: E402
 from alerts import get_settings, notify, read_run_status, write_run_status  # noqa: E402
-from backoff import RETRY_BASE_S, may_hit_site, record_hit, retry_wait  # noqa: E402
+from backoff import (
+    RETRY_BASE_S,
+    may_hit_site,
+    record_failure,
+    record_hit,
+    record_success,
+    retry_wait,
+)  # noqa: E402
 from portfolio import (  # noqa: E402
     _client,
     check_stop_losses,
@@ -93,6 +100,16 @@ def scrape_politely(attempts: int = 4, sleep=time.sleep) -> list[dict] | None:
         logger.info("Last site hit was too recent; skipping scrape this run.")
         return None
     record_hit()
+    try:
+        rows = _scrape_with_retries(attempts, sleep)
+    except Exception:
+        record_failure()  # next run waits longer (see backoff.current_interval)
+        raise
+    record_success()
+    return rows
+
+
+def _scrape_with_retries(attempts: int, sleep) -> list[dict]:
     for n in range(1, attempts + 1):
         try:
             return scrape_stock_advisor_rows()

@@ -9,7 +9,9 @@ if the session has expired (redirected to a login page / table not found)
 rather than silently returning nothing.
 """
 
+import json
 from pathlib import Path
+from urllib.parse import urlparse
 
 from playwright.sync_api import sync_playwright
 
@@ -57,6 +59,13 @@ def scrape_stock_advisor_rows() -> list[dict]:
             f"No saved session at {SESSION_PATH}. "
             "Run: uv run python scripts/motley_fool/login_and_save_session.py"
         )
+    try:
+        json.loads(SESSION_PATH.read_text())
+    except (OSError, ValueError) as e:
+        raise SessionExpiredError(
+            f"Saved session at {SESSION_PATH} is unreadable ({e}). "
+            "Re-run: uv run python scripts/motley_fool/login_and_save_session.py"
+        ) from e
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -67,7 +76,8 @@ def scrape_stock_advisor_rows() -> list[dict]:
         # actual table selector below instead, which is the real readiness signal.
         page.goto(NEW_RECS_URL, wait_until="load")
 
-        if "/premium" not in page.url:
+        # A bad login lands on /premium/api/auth/signin, so "/premium" alone isn't enough.
+        if not urlparse(page.url).path.startswith("/premium/new-recs"):
             browser.close()
             raise SessionExpiredError(
                 f"Redirected to {page.url} -- session likely expired. "
@@ -100,8 +110,23 @@ def scrape_stock_advisor_rows() -> list[dict]:
     return [r for r in rows if r["service_href"] == STOCK_ADVISOR_SLUG]
 
 
-if __name__ == "__main__":
-    import json
+def main() -> None:
+    """Run from the command line: same minimum wait (and failure back-off) as the pipeline."""
+    import backoff
 
-    rows = scrape_stock_advisor_rows()
+    if not backoff.may_hit_site():
+        minutes = backoff.current_interval() // 60
+        print(f"Skipped: the site was visited less than {minutes:.0f} min ago. Try again later.")
+        return
+    backoff.record_hit()
+    try:
+        rows = scrape_stock_advisor_rows()
+    except Exception:
+        backoff.record_failure()
+        raise
+    backoff.record_success()
     print(json.dumps(rows, indent=2))
+
+
+if __name__ == "__main__":
+    main()
