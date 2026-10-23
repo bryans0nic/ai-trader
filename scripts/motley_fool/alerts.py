@@ -1,14 +1,21 @@
 """Shared notification feed + adjustable risk settings for the Motley Fool pipeline.
 
 Alerts are appended to alerts.jsonl and shown newest-first in the dashboard's
-notification center. Settings live in settings.json; missing keys use DEFAULTS.
+notification center, and pushed to your phone via ntfy.sh when NTFY_TOPIC is set
+in .env. Settings live in settings.json; missing keys use DEFAULTS.
 """
 
 import json
+import os
 import sys
+import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
+NTFY_URL = "https://ntfy.sh/"
 DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "motley_fool"
 ALERTS_PATH = DATA_DIR / "alerts.jsonl"
 SETTINGS_PATH = DATA_DIR / "settings.json"
@@ -102,9 +109,28 @@ def notify(kind: str, message: str, dedupe_key: str | None = None) -> bool:
     with open(ALERTS_PATH, "a") as f:
         f.write(json.dumps(record) + "\n")
     print(f"ALERT [{kind}] {message}", file=sys.stderr)
+    push(f"AI trader: {kind}", message)
     return True
 
 
+def push(title: str, message: str) -> bool:
+    """Send a phone push to the ntfy.sh topic in NTFY_TOPIC (.env). Never raises; True if sent."""
+    if "PYTEST_CURRENT_TEST" in os.environ:
+        return False  # tests must never reach a real phone
+    load_dotenv(ENV_PATH)
+    topic = os.getenv("NTFY_TOPIC", "").strip()
+    if not topic:
+        print("PUSH skipped: NTFY_TOPIC is not set in .env", file=sys.stderr)
+        return False
+    req = urllib.request.Request(NTFY_URL + topic, data=message.encode(), headers={"Title": title})
+    try:
+        urllib.request.urlopen(req, timeout=10)
+        return True
+    except (OSError, ValueError) as e:  # a failed push must not stop a trading run
+        print(f"PUSH failed: {e}", file=sys.stderr)
+        return False
+
+
 if __name__ == "__main__":
-    # uv run python scripts/motley_fool/alerts.py  -> adds a test alert
-    notify("test", "Test alert from alerts.py")
+    # uv run python scripts/motley_fool/alerts.py ["message"]  -> adds a test alert and pushes it
+    notify("test", sys.argv[1] if len(sys.argv) > 1 else "Test alert from alerts.py")
