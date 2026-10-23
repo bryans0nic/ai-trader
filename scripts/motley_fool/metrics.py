@@ -103,6 +103,25 @@ def ignored_performance(decisions: list[dict]) -> list[dict]:
     ]
 
 
+def buys_vs_sp500(decisions: list[dict]) -> list[dict]:
+    """Each buy's return since the decision next to the S&P 500 over the same dates."""
+    rows = []
+    for r in decisions:
+        if r["decision"]["action"] != "buy":
+            continue
+        ours, sp = _return_since_decision(r), pct_change_since(BENCHMARK, _day(r))
+        rows.append(
+            {
+                "symbol": r["symbol"],
+                "day": _day(r),
+                "change_pct": ours,
+                "sp500_pct": sp,
+                "diff_pct": None if ours is None or sp is None else ours - sp,
+            }
+        )
+    return rows
+
+
 def _avg(values: list[float | None]) -> float | None:
     vals = [v for v in values if v is not None]
     return sum(vals) / len(vals) if vals else None
