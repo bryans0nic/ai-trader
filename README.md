@@ -324,4 +324,8 @@ ignored-pick performance, returns vs the S&P 500, a notification center (stop-lo
 session), editable stop-loss / daily-loss limits (defaults 10% / 5%) and a form to save Alpaca paper keys
 into `.env`. It listens on localhost only; `install-mac.sh` adds a login service, auto-deploy from `main`
 every 2 minutes, and a tailnet-only HTTPS address via Tailscale Serve (port 10443). There is no login on the
-page, so anyone on your tailnet can use it. Paper-to-live gate: [`docs/paper-to-live-checklist.md`](docs/paper-to-live-checklist.md).
+page, so anyone on your tailnet can use it.
+
+Phone alerts: every alert is also pushed to your phone through [ntfy.sh](https://ntfy.sh) when `NTFY_TOPIC` is set in
+`.env` (install the ntfy app and subscribe to that topic). Send a test with
+`uv run python scripts/motley_fool/alerts.py "hello"`. Paper-to-live gate: [`docs/paper-to-live-checklist.md`](docs/paper-to-live-checklist.md).

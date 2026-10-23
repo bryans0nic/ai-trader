@@ -13,14 +13,17 @@ import json
 import os
 import re
 import subprocess
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+
+from alerts import notify
 
 CLAUDE_BIN = os.environ.get("CLAUDE_BIN", "claude")
 MODEL = os.environ.get(
     "TRADER_CLAUDE_MODEL", "sonnet"
 )  # alias; the model actually used is logged per decision
 CLAUDE_TIMEOUT_S = 180
+MODEL_ALERT_EVERY = timedelta(hours=6)  # one alert per outage, not one per failed pick
 
 ACTIONS = ("buy", "ignore", "exit")
 
@@ -166,6 +169,12 @@ def decide(pick: dict, portfolio_context: dict) -> dict:
         # Claude unreachable / logged out / timed out: never trade on a failed call.
         model_output = {"content": "", "reasoning": "", "model": MODEL}
         decision = {"confidence": 0, "action": "ignore", "reasoning": f"CALL_ERROR: {e}"}
+        notify(
+            "model_unreachable",
+            f"AI model unreachable, no decision made for {pick.get('symbol')}: {e}",
+            dedupe_key="model_unreachable",
+            within=MODEL_ALERT_EVERY,
+        )
     else:
         try:
             decision = _parse_decision(model_output["content"])
