@@ -25,7 +25,7 @@ The Motley Fool trading pipeline tells you when it fails or trips a loss limit, 
 ### Polite scraping
 - [x] S4 Send an alert when the saved Motley Fool login has expired (#3, #8)
   Check: Point the scraper at an invalid saved login and confirm an alert arrives naming the expiry.
-- [ ] S5 Enforce a minimum wait between real site visits, however often the script runs (#3, #8)
+- [x] S5 Enforce a minimum wait between real site visits, however often the script runs (#3, #8)
   Check: Run the scraper twice in a row and confirm the second run skips the site and says why.
 - [ ] S6 Add growing waits after repeated scrape failures, reset on success (#3, #8)
   Check: Run `pytest -k backoff`: wait times grow per failure, hit a cap, and reset after success.
@@ -88,3 +88,4 @@ The Motley Fool trading pipeline tells you when it fails or trips a loss limit, 
 
 ## Log
 - S4: fool.com sends a bad login to /premium/api/auth/signin, which the old "/premium" test missed (vague 15s timeout instead), and a corrupt session file was retried 4x with no alert; scraper now checks the real new-recs path and validates the file, so both raise SessionExpiredError and send one session_expired alert via alerts.notify (test_session_expiry.py). Assumption: a real Chrome can't launch inside this sandbox, so the check ran the real scraper/alert code with a stand-in browser replaying the redirect seen with curl; phone delivery rides on notify() once S1 lands.
+- S5: the 15-minute minimum between site visits already guarded the pipeline (ai_reconcile.scrape_politely) but running scrape_new_recs.py directly skipped it and hit the site every time; it now goes through the same gate (shared last-hit file) and prints "Skipped: the site was visited less than 15 min ago. Try again in N min." (test_scrape_cli_wait.py). Checked with a stand-in browser: two runs in a row gave 1 site visit.

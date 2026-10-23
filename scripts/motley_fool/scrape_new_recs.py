@@ -10,6 +10,7 @@ rather than silently returning nothing.
 """
 
 import json
+import time
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -110,8 +111,21 @@ def scrape_stock_advisor_rows() -> list[dict]:
     return [r for r in rows if r["service_href"] == STOCK_ADVISOR_SLUG]
 
 
-if __name__ == "__main__":
-    import json
+def main() -> None:
+    """Run from the command line: same minimum wait between site visits as the pipeline."""
+    from backoff import LAST_HIT_PATH, MIN_INTERVAL_S, may_hit_site, record_hit
 
-    rows = scrape_stock_advisor_rows()
-    print(json.dumps(rows, indent=2))
+    if not may_hit_site():
+        last = json.loads(LAST_HIT_PATH.read_text())["at"]
+        wait = MIN_INTERVAL_S - (time.time() - last)
+        print(
+            f"Skipped: the site was visited less than {MIN_INTERVAL_S // 60} min ago. "
+            f"Try again in {wait / 60:.0f} min."
+        )
+        return
+    record_hit()
+    print(json.dumps(scrape_stock_advisor_rows(), indent=2))
+
+
+if __name__ == "__main__":
+    main()
