@@ -41,13 +41,13 @@ The Motley Fool trading pipeline tells you when it fails or trips a loss limit, 
   Check: Change a limit value, rerun the loss-limit tests, and see the new value take effect.
 
 ### Pipeline tests
-- [ ] S11 Test the saving of new picks: duplicates ignored and first-run baseline (#4)
+- [x] S11 Test the saving of new picks: duplicates ignored and first-run baseline (#4)
   Check: Run `pytest -k state`: duplicate picks are ingested once and baseline seeding passes.
-- [ ] S12 Test position sizing, swapping at the 10-position cap, and low buying power (#4)
+- [x] S12 Test position sizing, swapping at the 10-position cap, and low buying power (#4)
   Check: Run `pytest -k portfolio`: sizing, swap, already-held and low-cash cases pass.
-- [ ] S13 Test reading the AI's answer, including the broken-answer fallback (#4)
+- [x] S13 Test reading the AI's answer, including the broken-answer fallback (#4)
   Check: Run `pytest -k decide`: good, malformed and empty answers each give the expected decision.
-- [ ] S14 Test the scraper's loading-placeholder handling without opening the real site (#4)
+- [x] S14 Test the scraper's loading-placeholder handling without opening the real site (#4)
   Check: Run `pytest -k scrape`: placeholder pages are retried and real pages are read.
 
 ### Performance tracking
@@ -89,3 +89,7 @@ The Motley Fool trading pipeline tells you when it fails or trips a loss limit, 
 ## Log
 - S18: Rewrote docs/paper-to-live-checklist.md so each item links its issue plus proof (file, function, test names) or a measure. Added measures to the 3 open items (sector limit 30%, 60 paper days and 10 buys beating the S&P 500, no unexplained alerts in 30 days). Left the existing sign-off line for S19. Assumption: the checklist already existed from an earlier PR, so I edited it; the thresholds are my guesses. Check run: all linked files, functions and tests exist, and `pytest scripts/motley_fool` passes (41). Note: the issues are still open on GitHub (they close when the PR merges), and gh could not reach GitHub from here (certificate error).
 - S19: Replaced the vague "Owner" sign-off in docs/paper-to-live-checklist.md with a required section: approver is Bryan (repo owner), a list of what they review (ticked boxes, dashboard history, alert log, limits and amount), and a rule that `paper=True` stays until it is signed. Assumption: "owner" means Bryan since they own the repo; the checklist is documentation only, no code enforces it. Check: read the section and it names the approver and the review items.
+- S11: no code change. `scripts/motley_fool/test_state.py` (already on base) covers duplicates-once and baseline seeding; `pytest -k state` in scripts/motley_fool: 3 passed. Assumption: the existing tests meet the step, so no new test file. Ran with `uv run --no-project --with pytest --with pytest-cov` since the repo venv has no pytest.
+- S12: sizing, 10-position swap and low-cash cases were already tested in `test_portfolio.py` (left untouched); added `scripts/motley_fool/test_portfolio_held.py` for the missing already-held case. `pytest -k portfolio`: 12 passed. Needed `--with alpaca-py --with python-dotenv --with-editable ../..` in the uv run.
+- S13: no code change. `test_ai_decide.py` (already on base) covers good, empty, malformed and call-failure answers falling back to ignore; `pytest -k decide`: 9 passed.
+- S14: no scraper test existed; added `scripts/motley_fool/test_scrape.py` using a fake browser (real site never opened): real rows read and filtered to Stock Advisor, placeholder rows that never clear fail loudly, zero rows and login redirect and missing session raise. Assumption: the scraper "retries" placeholders by Playwright polling `wait_for_function` until the skeletons are gone (no page reload), so the test covers that wait. `pytest -k scrape`: 6 passed (5 new + 1 existing name match). Needs `--with playwright` in the uv run.
