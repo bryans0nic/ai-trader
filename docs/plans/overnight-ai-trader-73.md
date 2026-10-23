@@ -61,7 +61,7 @@ The Motley Fool trading pipeline tells you when it fails or trips a loss limit, 
 ### Live trading gate
 - [x] S18 Write the paper-to-live checklist with a link to each finished item (#7)
   Check: Open the checklist and confirm every item points to a finished issue or a clear measure.
-- [ ] S19 Add a required human sign-off line before switching off paper mode (#7)
+- [x] S19 Add a required human sign-off line before switching off paper mode (#7)
   Check: Read the checklist and confirm the sign-off line names who approves and what they review.
 
 ## Done when
@@ -88,3 +88,4 @@ The Motley Fool trading pipeline tells you when it fails or trips a loss limit, 
 
 ## Log
 - S18: Rewrote docs/paper-to-live-checklist.md so each item links its issue plus proof (file, function, test names) or a measure. Added measures to the 3 open items (sector limit 30%, 60 paper days and 10 buys beating the S&P 500, no unexplained alerts in 30 days). Left the existing sign-off line for S19. Assumption: the checklist already existed from an earlier PR, so I edited it; the thresholds are my guesses. Check run: all linked files, functions and tests exist, and `pytest scripts/motley_fool` passes (41). Note: the issues are still open on GitHub (they close when the PR merges), and gh could not reach GitHub from here (certificate error).
+- S19: Replaced the vague "Owner" sign-off in docs/paper-to-live-checklist.md with a required section: approver is Bryan (repo owner), a list of what they review (ticked boxes, dashboard history, alert log, limits and amount), and a rule that `paper=True` stays until it is signed. Assumption: "owner" means Bryan since they own the repo; the checklist is documentation only, no code enforces it. Check: read the section and it names the approver and the review items.

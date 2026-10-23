@@ -36,7 +36,14 @@ An unticked box has a measure: tick it only when the measure is met.
 - [ ] No unexplained alerts — [#1](https://github.com/bryans0nic/ai-trader/issues/1), [#3](https://github.com/bryans0nic/ai-trader/issues/3)
   Measure: every stop-loss, kill-switch and session-expired alert in the last 30 days of the dashboard alert log has a known cause.
 
-## Sign-off
-- [ ] Owner has reviewed this list, the dashboard history and the alert log, and approves moving to live trading — [#7](https://github.com/bryans0nic/ai-trader/issues/7)
+## Sign-off (required)
+Nobody, human or AI, changes `paper=True` in [`portfolio.py`](../scripts/motley_fool/portfolio.py) or swaps in live Alpaca keys until this section is signed.
 
-Signed off by: ______________  Date: ____________
+- [ ] **Approver: Bryan (repo owner, bryans0nic).** Bryan has personally reviewed all of the following and approves moving to live trading — [#7](https://github.com/bryans0nic/ai-trader/issues/7)
+  - every box above is ticked, or any unticked box has a written reason below
+  - the dashboard history: decisions, buys against the S&P 500, ignored picks
+  - the alert log: stop-loss, kill-switch and session-expired alerts, each with a known cause
+  - the stop-loss and daily-loss limits, and the amount of real money going in
+
+Signed off by (Bryan, full name): ______________  Date: ____________
+Reasons for any unticked box: ______________
