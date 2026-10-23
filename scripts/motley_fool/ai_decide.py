@@ -126,11 +126,22 @@ def _parse_decision(raw_content: str) -> dict:
     return parsed
 
 
+def _price_now(symbol: str | None) -> float | None:
+    """Last price, logged with the decision so later returns don't depend on a re-lookup."""
+    try:
+        from metrics import latest_price
+
+        return latest_price(symbol) if symbol else None
+    except Exception:
+        return None  # a missing price must never block logging the decision
+
+
 def _log_decision(pick: dict, portfolio_context: dict, model_output: dict, decision: dict) -> None:
     DECISIONS_LOG.parent.mkdir(parents=True, exist_ok=True)
     record = {
         "timestamp": datetime.now(UTC).isoformat(),
         "symbol": pick.get("symbol"),
+        "price": _price_now(pick.get("symbol")),
         "signal": pick,
         "portfolio_snapshot": portfolio_context,
         "model": model_output["model"],

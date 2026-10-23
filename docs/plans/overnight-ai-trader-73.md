@@ -87,3 +87,4 @@ The Motley Fool trading pipeline tells you when it fails or trips a loss limit, 
 - Assumption: if the push service needs an account or key you haven't set up, alert steps are built but marked untested in the PR.
 
 ## Log
+S15: each decision now logs the price at decision time (`price` in decisions.jsonl); new `track_ignored.py` prints the return since for every ignore (logged price to latest, older records fall back to that day's close), and the dashboard uses the same figure. Checked on a sample log: AAPL +5.5%, MSFT +0.7%; 43 tests pass. Assumption: the real decisions.jsonl is empty, so the check ran on a sample file.

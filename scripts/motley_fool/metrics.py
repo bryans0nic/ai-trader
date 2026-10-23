@@ -76,19 +76,31 @@ def _day(record: dict) -> str:
     return record["timestamp"][:10]
 
 
+def _return_since_decision(record: dict) -> float | None:
+    """% change from the price logged with the decision (older records: that day's close) to now."""
+    logged = record.get("price")
+    if not logged:
+        return pct_change_since(record["symbol"], _day(record))
+    try:
+        now = latest_price(record["symbol"])
+    except Exception:
+        return None
+    return None if now is None else (now - logged) / logged * 100
+
+
 def ignored_performance(decisions: list[dict]) -> list[dict]:
     """Each ignored pick with its price change since the decision (newest first)."""
-    rows = [
+    return [
         {
             "id": r.get("id"),
             "symbol": r["symbol"],
             "day": _day(r),
-            "change_pct": pct_change_since(r["symbol"], _day(r)),
+            "price": r.get("price"),
+            "change_pct": _return_since_decision(r),
         }
         for r in decisions
         if r["decision"]["action"] == "ignore"
     ]
-    return rows
 
 
 def _avg(values: list[float | None]) -> float | None:
