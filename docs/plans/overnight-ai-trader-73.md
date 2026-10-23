@@ -31,13 +31,13 @@ The Motley Fool trading pipeline tells you when it fails or trips a loss limit, 
   Check: Run `pytest -k backoff`: wait times grow per failure, hit a cap, and reset after success.
 
 ### Loss limits
-- [ ] S7 Add a per-position stop-loss that sells a holding once it falls past a set percent (#1)
+- [x] S7 Add a per-position stop-loss that sells a holding once it falls past a set percent (#1)
   Check: Run `pytest -k stop_loss`: a position down past the limit is sold, one inside it is kept.
-- [ ] S8 Add a daily portfolio loss limit that halts new buys when hit (#1)
+- [x] S8 Add a daily portfolio loss limit that halts new buys when hit (#1)
   Check: Run `pytest -k daily_loss`: buys are blocked after the limit trips and allowed before it.
-- [ ] S9 Send an alert whenever the stop-loss or daily loss limit trips (#1)
+- [x] S9 Send an alert whenever the stop-loss or daily loss limit trips (#1)
   Check: Run a paper cycle with a lowered limit and confirm an alert arrives for the trip.
-- [ ] S10 Keep the limits paper-account only and make them easy to change (#1)
+- [x] S10 Keep the limits paper-account only and make them easy to change (#1)
   Check: Change a limit value, rerun the loss-limit tests, and see the new value take effect.
 
 ### Pipeline tests
@@ -96,3 +96,7 @@ The Motley Fool trading pipeline tells you when it fails or trips a loss limit, 
 - S4: fool.com sends a bad login to /premium/api/auth/signin, which the old "/premium" test missed (vague 15s timeout instead), and a corrupt session file was retried 4x with no alert; scraper now checks the real new-recs path and validates the file, so both raise SessionExpiredError and send one session_expired alert via alerts.notify (test_session_expiry.py). Assumption: a real Chrome can't launch inside this sandbox, so the check ran the real scraper/alert code with a stand-in browser replaying the redirect seen with curl; phone delivery rides on notify() once S1 lands.
 - S5: the 15-minute minimum between site visits already guarded the pipeline (ai_reconcile.scrape_politely) but running scrape_new_recs.py directly skipped it and hit the site every time; it now goes through the same gate (shared last-hit file) and prints "Skipped: the site was visited less than 15 min ago. Try again in N min." (test_scrape_cli_wait.py). Checked with a stand-in browser: two runs in a row gave 1 site visit.
 - S6: retries inside one run already doubled (60s, 120s, 240s); added growth across runs: each consecutive failed run (including an expired login) doubles the required gap since the last visit, 15m, 15m, 30m, 1h ... capped at 6h, and a success resets it; stored as "failures" in the same last-visit file, and an unreadable file no longer blocks scraping; the pipeline and direct scraper runs both use it (test_backoff_across_runs.py). Assumptions: the first failure keeps the normal 15m gap, 6h cap.
+- S7: no code change needed; the stop-loss already shipped in PR #13 (`portfolio.check_stop_losses`, run at the start of every `ai_reconcile.py` pass, default 10% from settings.json). `pytest -k stop_loss` passes 3/3: BAD at -12% is sold, OK at -5% is kept. Ran with the main checkout venv plus a temp pytest (`-o addopts=` since pytest-cov is not installed there).
+- S8: no feature code needed; `portfolio.daily_loss_tripped` (PR #13) already halts new buys when equity is down past `daily_loss_pct` (default 5% in settings.json, not the 3% guessed in the plan; kept the existing value) vs last close. Its tests were named `kill_switch`, so `-k daily_loss` matched nothing; added `scripts/motley_fool/test_daily_loss.py` (blocked at -6%, allowed at -3%, limit adjustable). `pytest -k daily_loss` 3/3, full folder 44/44.
+- S9: both trips already call `alerts.notify` (kinds `stop_loss` and `kill_switch`, shown in the dashboard feed), so no feature code changed; added `scripts/motley_fool/test_loss_alerts.py` that lowers each limit and confirms one alert per trip and none inside limits (fake client, no real paper cycle: needs live Alpaca keys and market hours). These alerts reach the phone only once S1 hooks the push into `notify`; nothing here does that. Folder 47/47.
+- S10: no feature code needed; the Alpaca client is hardcoded `paper=True` (`portfolio._client`) with no live switch, and both limits are editable in `data/motley_fool/settings.json` or the dashboard Settings form (validated 0 to 100%). Added `scripts/motley_fool/test_paper_only.py` (client is always paper; no setting can turn it off). Check: temporarily set the `daily_loss_pct` default 5 -> 1, and the "allowed at -3%" tests flipped to blocked, so the new value is used; reverted. Folder 49/49.
