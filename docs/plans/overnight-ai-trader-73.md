@@ -51,7 +51,7 @@ The Motley Fool trading pipeline tells you when it fails or trips a loss limit, 
   Check: Run `pytest -k scrape`: placeholder pages are retried and real pages are read.
 
 ### Performance tracking
-- [ ] S15 Record what each ignored pick did afterward, using logged prices (#6)
+- [x] S15 Record what each ignored pick did afterward, using logged prices (#6)
   Check: Run the tracker on the saved decisions and see a return figure for each ignore.
 - [ ] S16 Compare each buy's return to the S&P 500 (#6)
   Check: Run the tracker and see each buy listed next to the S&P 500 over the same dates.
