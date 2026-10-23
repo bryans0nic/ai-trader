@@ -27,7 +27,7 @@ The Motley Fool trading pipeline tells you when it fails or trips a loss limit, 
   Check: Point the scraper at an invalid saved login and confirm an alert arrives naming the expiry.
 - [x] S5 Enforce a minimum wait between real site visits, however often the script runs (#3, #8)
   Check: Run the scraper twice in a row and confirm the second run skips the site and says why.
-- [ ] S6 Add growing waits after repeated scrape failures, reset on success (#3, #8)
+- [x] S6 Add growing waits after repeated scrape failures, reset on success (#3, #8)
   Check: Run `pytest -k backoff`: wait times grow per failure, hit a cap, and reset after success.
 
 ### Loss limits
@@ -89,3 +89,4 @@ The Motley Fool trading pipeline tells you when it fails or trips a loss limit, 
 ## Log
 - S4: fool.com sends a bad login to /premium/api/auth/signin, which the old "/premium" test missed (vague 15s timeout instead), and a corrupt session file was retried 4x with no alert; scraper now checks the real new-recs path and validates the file, so both raise SessionExpiredError and send one session_expired alert via alerts.notify (test_session_expiry.py). Assumption: a real Chrome can't launch inside this sandbox, so the check ran the real scraper/alert code with a stand-in browser replaying the redirect seen with curl; phone delivery rides on notify() once S1 lands.
 - S5: the 15-minute minimum between site visits already guarded the pipeline (ai_reconcile.scrape_politely) but running scrape_new_recs.py directly skipped it and hit the site every time; it now goes through the same gate (shared last-hit file) and prints "Skipped: the site was visited less than 15 min ago. Try again in N min." (test_scrape_cli_wait.py). Checked with a stand-in browser: two runs in a row gave 1 site visit.
+- S6: retries inside one run already doubled (60s, 120s, 240s); added growth across runs: each consecutive failed run (including an expired login) doubles the required gap since the last visit, 15m, 15m, 30m, 1h ... capped at 6h, and a success resets it; stored as "failures" in the same last-visit file, and an unreadable file no longer blocks scraping; the pipeline and direct scraper runs both use it (test_backoff_across_runs.py). Assumptions: the first failure keeps the normal 15m gap, 6h cap.
