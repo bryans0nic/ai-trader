@@ -9,7 +9,7 @@ import json
 import os
 import sys
 import urllib.request
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -94,11 +94,15 @@ def load_alerts() -> list[dict]:
         return [json.loads(line) for line in reversed(f.read().splitlines()) if line.strip()]
 
 
-def notify(kind: str, message: str, dedupe_key: str | None = None) -> bool:
-    """Append an alert. With dedupe_key, an alert with the same key is only recorded once.
-    Returns True if recorded."""
-    if dedupe_key and any(a.get("dedupe_key") == dedupe_key for a in load_alerts()):
-        return False
+def notify(
+    kind: str, message: str, dedupe_key: str | None = None, within: timedelta | None = None
+) -> bool:
+    """Append an alert. With dedupe_key, an alert with the same key is only recorded once
+    (or, with `within`, once per that window). Returns True if recorded."""
+    if dedupe_key:
+        cutoff = (datetime.now(UTC) - within).isoformat() if within else ""
+        if any(a.get("dedupe_key") == dedupe_key and a["timestamp"] > cutoff for a in load_alerts()):
+            return False
     ALERTS_PATH.parent.mkdir(parents=True, exist_ok=True)
     record = {
         "timestamp": datetime.now(UTC).isoformat(),
