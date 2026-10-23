@@ -37,7 +37,7 @@ The Motley Fool trading pipeline tells you when it fails or trips a loss limit, 
   Check: Run `pytest -k daily_loss`: buys are blocked after the limit trips and allowed before it.
 - [x] S9 Send an alert whenever the stop-loss or daily loss limit trips (#1)
   Check: Run a paper cycle with a lowered limit and confirm an alert arrives for the trip.
-- [ ] S10 Keep the limits paper-account only and make them easy to change (#1)
+- [x] S10 Keep the limits paper-account only and make them easy to change (#1)
   Check: Change a limit value, rerun the loss-limit tests, and see the new value take effect.
 
 ### Pipeline tests
@@ -90,3 +90,4 @@ The Motley Fool trading pipeline tells you when it fails or trips a loss limit, 
 - S7: no code change needed; the stop-loss already shipped in PR #13 (`portfolio.check_stop_losses`, run at the start of every `ai_reconcile.py` pass, default 10% from settings.json). `pytest -k stop_loss` passes 3/3: BAD at -12% is sold, OK at -5% is kept. Ran with the main checkout venv plus a temp pytest (`-o addopts=` since pytest-cov is not installed there).
 - S8: no feature code needed; `portfolio.daily_loss_tripped` (PR #13) already halts new buys when equity is down past `daily_loss_pct` (default 5% in settings.json, not the 3% guessed in the plan; kept the existing value) vs last close. Its tests were named `kill_switch`, so `-k daily_loss` matched nothing; added `scripts/motley_fool/test_daily_loss.py` (blocked at -6%, allowed at -3%, limit adjustable). `pytest -k daily_loss` 3/3, full folder 44/44.
 - S9: both trips already call `alerts.notify` (kinds `stop_loss` and `kill_switch`, shown in the dashboard feed), so no feature code changed; added `scripts/motley_fool/test_loss_alerts.py` that lowers each limit and confirms one alert per trip and none inside limits (fake client, no real paper cycle: needs live Alpaca keys and market hours). These alerts reach the phone only once S1 hooks the push into `notify`; nothing here does that. Folder 47/47.
+- S10: no feature code needed; the Alpaca client is hardcoded `paper=True` (`portfolio._client`) with no live switch, and both limits are editable in `data/motley_fool/settings.json` or the dashboard Settings form (validated 0 to 100%). Added `scripts/motley_fool/test_paper_only.py` (client is always paper; no setting can turn it off). Check: temporarily set the `daily_loss_pct` default 5 -> 1, and the "allowed at -3%" tests flipped to blocked, so the new value is used; reverted. Folder 49/49.
