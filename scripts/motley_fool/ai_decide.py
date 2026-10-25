@@ -68,7 +68,7 @@ def _build_user_prompt(pick: dict, portfolio_context: dict) -> str:
     )
 
 
-def _call_claude(system_prompt: str, user_prompt: str) -> dict:
+def _call_claude(system_prompt: str, user_prompt: str, schema: dict = DECISION_SCHEMA) -> dict:
     """One headless Claude call, no tools/MCP/settings. Returns {"content", "reasoning", "model"}."""
     env = {
         k: v
@@ -98,7 +98,7 @@ def _call_claude(system_prompt: str, user_prompt: str) -> dict:
         "--system-prompt",
         system_prompt,
         "--json-schema",
-        json.dumps(DECISION_SCHEMA),
+        json.dumps(schema),
     ]
     proc = subprocess.run(
         args, input=user_prompt, capture_output=True, text=True, timeout=CLAUDE_TIMEOUT_S, env=env
