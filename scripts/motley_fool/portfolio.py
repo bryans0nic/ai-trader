@@ -16,11 +16,10 @@ import sys
 from datetime import date
 
 from alpaca.trading.client import TradingClient
-from alpaca.trading.enums import OrderSide, TimeInForce
-from alpaca.trading.requests import MarketOrderRequest
 from dotenv import load_dotenv
 
 sys.path.insert(0, os.path.dirname(__file__))
+import sleeves  # noqa: E402
 from alerts import get_settings, notify  # noqa: E402
 from state import get_confidence, load_state, save_state  # noqa: E402
 
@@ -28,6 +27,7 @@ from ai_trader.core.logging import get_logger  # noqa: E402
 
 logger = get_logger(__name__)
 
+SLEEVE = "motley_fool"  # this module trades only this sleeve
 MAX_HOLDINGS = 10
 MIN_WEIGHT = 0.05
 MAX_WEIGHT = 0.20
@@ -66,31 +66,35 @@ def daily_loss_tripped(account) -> bool:
 
 
 def check_stop_losses(trading_client: TradingClient) -> list[str]:
-    """Place a sell for any holding whose unrealized loss is past the stop-loss limit, skipping
+    """Place a sell for any sleeve holding whose unrealized loss is past the stop-loss limit, skipping
     exempt symbols and ones that already have an order waiting. Returns the symbols sold."""
     settings = get_settings()
     limit = settings["stop_loss_pct"]
     skip = set(settings["stop_loss_exempt"]) | {o.symbol for o in trading_client.get_orders()}
+    price_map = sleeves.prices(trading_client)
     sold = []
-    for p in trading_client.get_all_positions():
-        loss_pct = float(p.unrealized_plpc) * 100
-        if loss_pct > -limit or p.symbol in skip:
-            continue
-        trading_client.close_position(p.symbol)
-        sold.append(p.symbol)
-        notify(
-            "stop_loss",
-            f"Stop-loss: sell order placed for {p.symbol} at {loss_pct:.2f}% (limit -{limit:g}%).",
-        )
-        _set_pick_status(p.symbol, "stopped_out")
+    for sleeve in sleeves.SLEEVES:
+        for h in sleeves.holdings(trading_client, sleeve, price_map):
+            loss_pct = h["unrealized_plpc"]
+            if loss_pct > -limit or h["symbol"] in skip:
+                continue
+            sleeves.sell_all(trading_client, sleeve, h["symbol"])
+            sold.append(h["symbol"])
+            notify(
+                "stop_loss",
+                f"Stop-loss ({sleeve}): sell order placed for {h['symbol']} at {loss_pct:.2f}% (limit -{limit:g}%).",
+            )
+            _set_pick_status(h["symbol"], "stopped_out")
     return sold
 
 
 def manual_sell(trading_client: TradingClient, symbol: str) -> None:
-    """Close a holding on request from the dashboard."""
-    if not any(p.symbol == symbol for p in trading_client.get_all_positions()):
-        raise ValueError(f"{symbol} is not currently held.")
-    trading_client.close_position(symbol)
+    """Sell a holding on request from the dashboard, out of every sleeve that holds it."""
+    sold_from = [s for s in sleeves.SLEEVES if sleeves.sell_all(trading_client, s, symbol)]
+    if not sold_from:
+        if not any(p.symbol == symbol for p in trading_client.get_all_positions()):
+            raise ValueError(f"{symbol} is not currently held.")
+        trading_client.close_position(symbol)  # held outside every sleeve (bought by hand)
     notify("manual_sell", f"Manual sell order placed for {symbol} from the dashboard.")
     _set_pick_status(symbol, "sold_manually")
 
@@ -102,15 +106,15 @@ def _set_pick_status(symbol: str, status: str) -> None:
         save_state(state)
 
 
-def current_holdings(trading_client: TradingClient) -> list[dict]:
-    positions = trading_client.get_all_positions()
-    holdings = []
-    for p in positions:
-        confidence = get_confidence(p.symbol) or 0.0
-        holdings.append(
-            {"symbol": p.symbol, "confidence": confidence, "market_value": float(p.market_value)}
-        )
-    return holdings
+def current_holdings(trading_client: TradingClient, sleeve: str = SLEEVE) -> list[dict]:
+    return [
+        {
+            "symbol": h["symbol"],
+            "confidence": get_confidence(h["symbol"]) or 0.0,
+            "market_value": h["market_value"],
+        }
+        for h in sleeves.holdings(trading_client, sleeve)
+    ]
 
 
 def reconcile_new_pick(symbol: str) -> None:
@@ -121,7 +125,7 @@ def reconcile_new_pick(symbol: str) -> None:
 
     trading_client = _client()
     account = trading_client.get_account()
-    portfolio_value = float(account.portfolio_value)
+    portfolio_value = sleeves.equity(trading_client, SLEEVE)
     holdings = current_holdings(trading_client)
 
     if daily_loss_tripped(account):
@@ -144,7 +148,7 @@ def reconcile_new_pick(symbol: str) -> None:
             f"Portfolio has {len(holdings)}/{MAX_HOLDINGS} holdings. "
             f"Buying {symbol} (confidence={confidence}, target weight={weight:.1%}, notional=${desired_notional:,.2f})"
         )
-        _buy(trading_client, symbol, desired_notional, account)
+        _buy(trading_client, symbol, desired_notional)
         return
 
     weakest = min(holdings, key=lambda h: h["confidence"])
@@ -162,11 +166,9 @@ def reconcile_new_pick(symbol: str) -> None:
         f"Portfolio full. {symbol} (confidence={confidence}) beats weakest holding "
         f"{weakest['symbol']} (confidence={weakest['confidence']}). Supplanting."
     )
-    trading_client.close_position(weakest["symbol"])
+    sleeves.sell_all(trading_client, SLEEVE, weakest["symbol"])
     logger.info(f"Closed {weakest['symbol']}.")
-
-    account = trading_client.get_account()
-    _buy(trading_client, symbol, desired_notional, account)
+    _buy(trading_client, symbol, desired_notional)
 
 
 def exit_position(symbol: str) -> None:
@@ -177,7 +179,7 @@ def exit_position(symbol: str) -> None:
         logger.info(f"{symbol} is not currently held; nothing to exit.")
         return
 
-    trading_client.close_position(symbol)
+    sleeves.sell_all(trading_client, SLEEVE, symbol)
     logger.info(f"Closed {symbol} on AI-recommended exit.")
 
     state = load_state()
@@ -186,23 +188,12 @@ def exit_position(symbol: str) -> None:
         save_state(state)
 
 
-def _buy(trading_client: TradingClient, symbol: str, notional: float, account) -> None:
-    buying_power = float(account.buying_power)
-    notional = min(notional, buying_power)
-    if notional < 1.0:
-        logger.warning(
-            f"Insufficient buying power (${buying_power:,.2f}) to buy {symbol}. Skipping."
-        )
+def _buy(trading_client: TradingClient, symbol: str, notional: float) -> None:
+    spent = sleeves.buy(trading_client, SLEEVE, symbol, notional)
+    if not spent:
+        logger.warning(f"Sleeve {SLEEVE} has no cash or no trades left today; skipping {symbol}.")
         return
-
-    order = MarketOrderRequest(
-        symbol=symbol,
-        notional=round(notional, 2),
-        side=OrderSide.BUY,
-        time_in_force=TimeInForce.DAY,
-    )
-    trading_client.submit_order(order)
-    logger.info(f"Submitted paper BUY: {symbol} notional=${notional:,.2f}")
+    logger.info(f"Submitted paper BUY: {symbol} notional=${spent:,.2f}")
 
     state = load_state()
     if symbol in state["picks"]:
@@ -217,7 +208,9 @@ def print_status() -> None:
     state = load_state()
 
     print(
-        f"Portfolio value: ${float(account.portfolio_value):,.2f}  Cash: ${float(account.cash):,.2f}"
+        f"Account value: ${float(account.portfolio_value):,.2f}  "
+        f"{SLEEVE} sleeve: ${sleeves.equity(trading_client, SLEEVE):,.2f}, "
+        f"cash ${sleeves.book(trading_client, SLEEVE)['cash']:,.2f}"
     )
     print(f"Holdings ({len(holdings)}/{MAX_HOLDINGS}):")
     for h in sorted(holdings, key=lambda x: -x["confidence"]):

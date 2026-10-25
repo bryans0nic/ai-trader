@@ -31,15 +31,27 @@ def test_target_weight_scales_and_clamps():
 
 def test_position_size_is_weight_of_portfolio(run):
     c = run("NEW", 100, FakeClient(equity=100_000))
-    assert len(c.orders) == 1 and c.orders[0].notional == pytest.approx(20_000)
+    # the sleeve holds 1/5 of the account ($20k), and 100 confidence means 20% of it
+    assert len(c.orders) == 1 and c.orders[0].notional == pytest.approx(4_000)
     assert state.load_state()["picks"]["NEW"]["status"] == "active"
 
 
-def test_insufficient_buying_power_caps_then_skips(run):
-    c = run("NEW", 100, FakeClient(equity=100_000, buying_power=5_000))
-    assert c.orders[0].notional == pytest.approx(5_000)  # capped to what's available
-    c = run("NEW", 100, FakeClient(equity=100_000, buying_power=0.50))
+def test_sleeve_cash_caps_then_skips(run):
+    # sleeve holds $18k of its $20k, so only $2k of cash is left
+    c = run("NEW", 100, FakeClient(equity=100_000, positions=[position("OLD", value=18_000)]))
+    assert c.orders[0].notional == pytest.approx(2_000)  # capped to the sleeve's cash
+    c = run("NEW", 100, FakeClient(equity=100_000, positions=[position("OLD", value=19_999.5)]))
     assert c.orders == []  # < $1: skipped
+
+
+def test_other_sleeves_money_is_not_touched(run):
+    c = run("NEW", 100, FakeClient(equity=100_000, buying_power=100_000))
+    assert c.orders[0].notional <= 20_000 and c.orders[0].client_order_id.startswith("motley_fool:NEW:buy:")
+
+
+def test_trade_cap_blocks_buys(run):
+    alerts.save_settings(max_trades_per_sleeve_per_day=0)
+    assert run("NEW", 100, FakeClient()).orders == []
 
 
 def _full_portfolio(weakest_conf):
@@ -59,7 +71,7 @@ def test_full_portfolio_supplants_weakest_when_beaten(monkeypatch):
     state.save_state(st)
     monkeypatch.setattr(portfolio, "_client", lambda: c)
     portfolio.reconcile_new_pick("NEW")
-    assert c.closed == ["S0"] and [o.symbol for o in c.orders] == ["NEW"]
+    assert c.closed == ["S0"] and c.orders[-1].symbol == "NEW"
 
 
 def test_full_portfolio_no_trade_when_not_beating_weakest(monkeypatch):
