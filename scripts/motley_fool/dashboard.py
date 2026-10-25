@@ -22,6 +22,7 @@ from urllib.parse import parse_qs, urlencode, urlparse
 import ai_decide
 import alerts
 import metrics
+import sleeves
 from dotenv import load_dotenv, set_key
 from portfolio import manual_sell
 from state import load_state
@@ -228,6 +229,32 @@ def _orders_html(client) -> str:
         for o in orders
     )
     return f"<ul class=list>{rows}</ul>" if rows else _empty("No orders yet.")
+
+
+SLEEVE_NAMES = {
+    "motley_fool": "Motley Fool picks", "momentum": "Momentum screen", "review": "Holdings review",
+    "news": "News and earnings", "spy": "S&P 500 (benchmark)",
+}
+
+
+def _leaderboard_html(client_factory) -> str:
+    try:
+        rows = sleeves.leaderboard(client_factory())
+    except (Exception, SystemExit) as e:
+        return f"<p class=err>Leaderboard unavailable: {escape(str(e))}</p>"
+    days = sleeves.days_running()
+    note = (
+        f"<p class=empty>Day {days}. Too early to call a winner: wait for about 30 days of results.</p>"
+        if days < 30
+        else ""
+    )
+    body = "".join(
+        f"<li><div><b>{i}. {escape(SLEEVE_NAMES.get(r['sleeve'], r['sleeve']))}</b>"
+        f"<small>{r['positions']} positions · {r['trades']} orders · cash {_usd(r['cash'])}</small></div>"
+        f"<div class=num>{_signed(r['return_pct'], _pct(r['return_pct']))}<small>{_usd(r['equity'])}</small></div></li>"
+        for i, r in enumerate(rows, 1)
+    )
+    return note + f"<ul class=list>{body}</ul>"
 
 
 def _account_html(client_factory, decisions: list[dict]) -> str:
@@ -573,6 +600,7 @@ def index_page(client_factory, params: dict | None = None) -> bytes:
     unread = len(alerts.unread_alerts())
     sections = [
         ("account", "Account", _account_html(client_factory, decisions)),
+        ("leaderboard", "Leaderboard", _leaderboard_html(client_factory)),
         ("performance", "Performance", _performance_html(client_factory, decisions, range_key)),
         ("alerts-section", "Alerts", _alerts_html()),
         ("decisions", "Decisions", _decisions_html(decisions, action, q)),

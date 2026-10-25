@@ -49,11 +49,12 @@ def book(client, sleeve: str) -> dict:
     cash = allocation(client)
     positions: dict[str, dict] = {}
     today = datetime.now(UTC).date().isoformat()
-    trades_today = 0
+    trades_today = trades_total = 0
     for o in _sleeve_orders(client, sleeve):
         side = str(o.side).lower().rsplit(".", 1)[-1]
-        if str(getattr(o, "submitted_at", ""))[:10] == today and str(o.status).lower().rsplit(".", 1)[-1] not in {"canceled", "expired", "rejected"}:
-            trades_today += 1
+        if str(o.status).lower().rsplit(".", 1)[-1] not in {"canceled", "expired", "rejected"}:
+            trades_total += 1
+            trades_today += str(getattr(o, "submitted_at", ""))[:10] == today
         qty = float(getattr(o, "filled_qty", 0) or 0)
         if qty > 0:
             value = qty * float(o.filled_avg_price)
@@ -69,18 +70,18 @@ def book(client, sleeve: str) -> dict:
         if side == "buy" and _is_open(o):  # money promised to an order still waiting to fill
             cash -= float(o.notional or 0) - qty * float(getattr(o, "filled_avg_price", 0) or 0)
     positions = {s: p for s, p in positions.items() if p["qty"] > 1e-6}
-    return {"cash": cash, "positions": positions, "trades_today": trades_today}
+    return {"cash": cash, "positions": positions, "trades_today": trades_today, "trades_total": trades_total}
 
 
 def prices(client) -> dict[str, float]:
     return {p.symbol: float(p.current_price) for p in client.get_all_positions()}
 
 
-def holdings(client, sleeve: str, price_map: dict[str, float] | None = None) -> list[dict]:
+def holdings(client, sleeve: str, price_map: dict[str, float] | None = None, b: dict | None = None) -> list[dict]:
     """Positions of one sleeve with market value and unrealized P/L %."""
     price_map = prices(client) if price_map is None else price_map
     out = []
-    for symbol, p in book(client, sleeve)["positions"].items():
+    for symbol, p in (b or book(client, sleeve))["positions"].items():
         value = p["qty"] * price_map.get(symbol, p["cost"] / p["qty"])
         out.append({
             "symbol": symbol,
@@ -93,6 +94,27 @@ def holdings(client, sleeve: str, price_map: dict[str, float] | None = None) -> 
 
 def equity(client, sleeve: str, price_map: dict[str, float] | None = None) -> float:
     return book(client, sleeve)["cash"] + sum(h["market_value"] for h in holdings(client, sleeve, price_map))
+
+
+def leaderboard(client) -> list[dict]:
+    """One row per sleeve, best return first. Return is measured against the sleeve's starting share."""
+    start, price_map = allocation(client), prices(client)
+    rows = []
+    for sleeve in SLEEVES:
+        b = book(client, sleeve)
+        held = holdings(client, sleeve, price_map, b)
+        value = b["cash"] + sum(h["market_value"] for h in held)
+        rows.append({
+            "sleeve": sleeve, "equity": value, "return_pct": (value / start - 1) * 100,
+            "cash": b["cash"], "positions": len(held), "trades": b["trades_total"],
+        })
+    return sorted(rows, key=lambda r: -r["return_pct"])
+
+
+def days_running() -> int:
+    if not SLEEVES_PATH.exists():
+        return 0
+    return (datetime.now(UTC) - datetime.fromisoformat(json.loads(SLEEVES_PATH.read_text())["started"])).days
 
 
 def _place(client, sleeve: str, symbol: str, side: str, **size) -> None:
