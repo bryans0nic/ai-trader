@@ -28,6 +28,7 @@ DEFAULTS = {
     "stop_loss_pct": 10.0,
     "daily_loss_pct": 5.0,
     "trading_paused": False,
+    "max_trades_per_sleeve_per_day": 5,
     "stop_loss_exempt": [],
 }
 
@@ -39,6 +40,7 @@ def get_settings() -> dict:
     settings = {**DEFAULTS, **{k: v for k, v in saved.items() if k in DEFAULTS}}
     for key in LIMITS:
         settings[key] = float(settings[key])
+    settings["max_trades_per_sleeve_per_day"] = int(settings["max_trades_per_sleeve_per_day"])
     settings["trading_paused"] = bool(settings["trading_paused"])
     settings["stop_loss_exempt"] = sorted({str(s) for s in settings["stop_loss_exempt"]})
     return settings

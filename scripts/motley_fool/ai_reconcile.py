@@ -33,13 +33,16 @@ from backoff import (
     record_success,
     retry_wait,
 )  # noqa: E402
+import sleeves  # noqa: E402
 from portfolio import (  # noqa: E402
+    SLEEVE,
     _client,
     check_stop_losses,
     current_holdings,
     exit_position,
     reconcile_new_pick,
 )
+from spy_baseline import spy_baseline  # noqa: E402
 from scrape_new_recs import SessionExpiredError, scrape_stock_advisor_rows  # noqa: E402
 from state import ingest_scraped_rows, load_state, save_state, set_confidence  # noqa: E402
 
@@ -50,12 +53,12 @@ logger = get_logger(__name__)
 
 def build_portfolio_context() -> dict:
     trading_client = _client()
-    account = trading_client.get_account()
+    cash = sleeves.book(trading_client, SLEEVE)["cash"]
     holdings = current_holdings(trading_client)
     return {
-        "portfolio_value": float(account.portfolio_value),
-        "cash": float(account.cash),
-        "buying_power": float(account.buying_power),
+        "portfolio_value": sleeves.equity(trading_client, SLEEVE),
+        "cash": cash,
+        "buying_power": cash,
         "holdings": holdings,  # [{symbol, confidence, market_value}, ...]
         "num_holdings": len(holdings),
         "max_holdings": 10,
@@ -138,6 +141,13 @@ def run_once() -> tuple[str, bool | None]:
     except Exception:
         logger.exception("Stop-loss check failed; continuing.")
         notes.append("stop-loss check failed")
+
+    try:
+        if spy_baseline(_client()):
+            notes.append("bought the S&P 500 baseline")
+    except Exception:
+        logger.exception("S&P 500 baseline buy failed; continuing.")
+        notes.append("S&P 500 baseline failed")
 
     def done(text: str, session_ok: bool | None) -> tuple[str, bool | None]:
         return "; ".join([*notes, text]), session_ok
