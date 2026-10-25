@@ -21,3 +21,10 @@ def test_spy_baseline_buys_whole_share_once():
                            notional=20_000, submitted_at="2000-01-01"))()
     )
     assert spy_baseline(c) is False and len(c.orders) == 1
+
+
+def test_leaderboard_ranks_by_return_against_starting_share():
+    c = FakeClient(equity=100_000, positions=[position("UP", value=11_000, plpc=0.1)])  # bought at 10k, now 11k
+    rows = sleeves.leaderboard(c)
+    assert rows[0]["sleeve"] == "motley_fool" and round(rows[0]["return_pct"], 2) == 5.0  # +1k on 20k
+    assert {r["sleeve"] for r in rows} == set(sleeves.SLEEVES) and rows[-1]["return_pct"] == 0

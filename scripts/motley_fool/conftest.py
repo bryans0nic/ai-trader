@@ -8,6 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import alerts  # noqa: E402
 import backoff  # noqa: E402
+import momentum  # noqa: E402
 import sleeves  # noqa: E402
 import state  # noqa: E402
 
@@ -21,6 +22,7 @@ def isolated_data(tmp_path, monkeypatch):
     monkeypatch.setattr(alerts, "ALERTS_READ_PATH", tmp_path / "alerts_read.json")
     monkeypatch.setattr(alerts, "RUN_STATUS_PATH", tmp_path / "run_status.json")
     monkeypatch.setattr(sleeves, "SLEEVES_PATH", tmp_path / "sleeves.json")
+    monkeypatch.setattr(momentum, "LAST_RUN_PATH", tmp_path / "momentum_last_run.json")
     monkeypatch.setattr(backoff, "LAST_HIT_PATH", tmp_path / "last_hit.json")
 
 

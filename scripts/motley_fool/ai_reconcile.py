@@ -33,6 +33,7 @@ from backoff import (
     record_success,
     retry_wait,
 )  # noqa: E402
+import momentum  # noqa: E402
 import sleeves  # noqa: E402
 from portfolio import (  # noqa: E402
     SLEEVE,
@@ -155,6 +156,12 @@ def run_once() -> tuple[str, bool | None]:
     if get_settings()["trading_paused"]:
         logger.info("Trading is paused; not looking for new picks.")
         return done("trading paused, new picks not checked", None)
+
+    try:
+        notes.extend(f"momentum {n}" for n in momentum.run(_client()))
+    except Exception:
+        logger.exception("Momentum sleeve failed; continuing.")
+        notes.append("momentum sleeve failed")
 
     logger.info("Scraping Motley Fool Stock Advisor New Recs...")
     rows = scrape_politely()
