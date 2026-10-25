@@ -155,7 +155,7 @@ def _log_decision(pick: dict, portfolio_context: dict, model_output: dict, decis
         f.write(json.dumps(record, default=str) + "\n")
 
 
-def decide(pick: dict, portfolio_context: dict) -> dict:
+def decide(pick: dict, portfolio_context: dict, system_prompt: str = SYSTEM_PROMPT) -> dict:
     """
     Ask Claude to evaluate a pick/signal. Returns the parsed decision
     dict ({"confidence", "action", "reasoning"}) and logs the full exchange
@@ -164,7 +164,7 @@ def decide(pick: dict, portfolio_context: dict) -> dict:
     """
     user_prompt = _build_user_prompt(pick, portfolio_context)
     try:
-        model_output = _call_claude(SYSTEM_PROMPT, user_prompt)
+        model_output = _call_claude(system_prompt, user_prompt)
     except (RuntimeError, OSError, subprocess.TimeoutExpired) as e:
         # Claude unreachable / logged out / timed out: never trade on a failed call.
         model_output = {"content": "", "reasoning": "", "model": MODEL}
