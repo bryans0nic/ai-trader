@@ -232,7 +232,7 @@ def _orders_html(client) -> str:
 
 
 SLEEVE_NAMES = {
-    "motley_fool": "Motley Fool picks", "momentum": "Momentum screen", "review": "Holdings review",
+    "motley_fool": "Motley Fool picks", "momentum": "Momentum screen", "review": "Claude's own picks",
     "news": "News and earnings", "spy": "S&P 500 (benchmark)",
 }
 

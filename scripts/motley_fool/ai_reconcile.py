@@ -34,6 +34,7 @@ from backoff import (
     retry_wait,
 )  # noqa: E402
 import momentum  # noqa: E402
+import review  # noqa: E402
 import sleeves  # noqa: E402
 from portfolio import (  # noqa: E402
     SLEEVE,
@@ -162,6 +163,11 @@ def run_once() -> tuple[str, bool | None]:
     except Exception:
         logger.exception("Momentum sleeve failed; continuing.")
         notes.append("momentum sleeve failed")
+    try:
+        notes.extend(f"review {n}" for n in review.run(_client()))
+    except Exception:
+        logger.exception("Review sleeve failed; continuing.")
+        notes.append("review sleeve failed")
 
     logger.info("Scraping Motley Fool Stock Advisor New Recs...")
     rows = scrape_politely()
