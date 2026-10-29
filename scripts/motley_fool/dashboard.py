@@ -535,6 +535,7 @@ i.s-portfolio{background:var(--s1)}i.s-sp500{background:var(--s2)}
 .tip{position:absolute;top:0;pointer-events:none;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:12px;white-space:nowrap;box-shadow:0 2px 8px #0003}
 .tbl table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}.tbl td,.tbl th{text-align:left;padding:4px 6px;border-top:1px solid var(--line)}
 nav a b{color:var(--neg)}
+.ios-top-strip{display:none}@media (display-mode:standalone){.ios-top-strip{display:block;position:fixed;top:0;left:0;right:0;height:11px;z-index:2147483647;pointer-events:none;background:rgb(128 128 128/.004)}}
 </style>"""
 
 SCRIPT = """<script>
@@ -585,7 +586,7 @@ def page(body: str, title: str = "Trader dashboard") -> bytes:
         "<meta name=viewport content='width=device-width,initial-scale=1,viewport-fit=cover'>"
         "<link rel=apple-touch-icon href=/apple-touch-icon.png><link rel=icon type=image/png href=/apple-touch-icon.png>"
         "<meta name=apple-mobile-web-app-title content=Trader><meta name=theme-color content=#0f1115>"
-        f"<title>{escape(title)}</title>{STYLE}<main><header><h1>{escape(title)}</h1></header>{body}</main>{SCRIPT}</html>"
+        f"<title>{escape(title)}</title>{STYLE}<div aria-hidden=true class=ios-top-strip></div><main><header><h1>{escape(title)}</h1></header>{body}</main>{SCRIPT}</html>"
     ).encode()
 
 
